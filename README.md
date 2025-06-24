@@ -17,8 +17,13 @@ Data Dashboard for Bay Area Council Economic Institute
    ```bash
    pip install streamlit pandas numpy matplotlib requests
    ```
+   or try...
+   
+   ```bash
+   pip3 install streamlit pandas numpy matplotlib requests
+   ```
 
-3. **Run the dashboard**  
+4. **Run the dashboard**  
    From the terminal, launch the app by running this command:
 
    ```bash
