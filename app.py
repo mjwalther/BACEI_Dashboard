@@ -146,7 +146,7 @@ if section == "Employment":
                 x="date",
                 y="Unemployment Rate",
                 color="Area Name",
-                title="Bay Area Unemployment Rate - Last 10 Years",
+                title="Bay Area Unemployment Rate",
                 labels={"date": "Date", "Unemployment Rate": "Unemployment Rate (%)"},
                 line_shape="linear"
             )
