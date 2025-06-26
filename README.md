@@ -38,3 +38,4 @@ Data Dashboard for Bay Area Council Economic Institute
 
 - **Local Area Unemployment Statistics (LAUS)**  
   Source: [California Open Data Portal](https://data.ca.gov/dataset/local-area-unemployment-statistics-laus/resource/b4bc4656-7866-420f-8d87-4eda4c9996ed)
+  Data: Unemployment Rates, Employment
