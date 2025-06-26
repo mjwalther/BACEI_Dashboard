@@ -17,210 +17,149 @@ section = st.sidebar.selectbox(
 
 # Main content
 if section == "Employment":
-    st.header("Employment")
 
     bay_area_counties = [
-        "Alameda County", "Contra Costa County", "Marin County",
-        "Napa County", "San Francisco County", "San Mateo County",
-        "Santa Clara County", "Solano County", "Sonoma County"
+    "Alameda County", "Contra Costa County", "Marin County",
+    "Napa County", "San Francisco County", "San Mateo County",
+    "Santa Clara County", "Solano County", "Sonoma County"
     ]
 
-    @st.cache_data(ttl=3600)  # Cache for 1 hour
+
+
+    # --- Data Fetching ---
+
+
+    # Cache data with streamlit for 1 hour
+    @st.cache_data(ttl=3600)
     def fetch_unemployment_data():
-        """Fetch unemployment data from CA Open Data Portal"""
-        
         API_ENDPOINT = "https://data.ca.gov/api/3/action/datastore_search"
         RESOURCE_ID = "b4bc4656-7866-420f-8d87-4eda4c9996ed"
-        
+
         try:
-            # Get total record count first
-            response = requests.get(API_ENDPOINT, params={
-                "resource_id": RESOURCE_ID,
-                "limit": 1
-            }, timeout=30)
-            
+            # Fetch total records using an API request
+            response = requests.get(API_ENDPOINT, params={"resource_id": RESOURCE_ID, "limit": 1}, timeout=30)
             if response.status_code != 200:
                 st.error(f"Failed to connect to API. Status code: {response.status_code}")
                 return None
-                
+
             total_records = response.json()["result"]["total"]
-            
-            # Fetch the most recent data
             all_data = []
             chunk_size = 10000
-            
-            # Fetch from most recent records first
+
+            # Look through total records in chunks to fetch data
             for offset in range(0, total_records, chunk_size):
-                try:
-                    response = requests.get(API_ENDPOINT, params={
-                        "resource_id": RESOURCE_ID,
-                        "limit": min(chunk_size, total_records - offset),
-                        "offset": offset
-                    }, timeout=30)
-                    
-                    if response.status_code == 200:
-                        chunk_data = response.json()["result"]["records"]
-                        all_data.extend(chunk_data)
-                    else:
-                        st.warning(f"Failed to fetch chunk at offset {offset}")
-                        
-                except requests.exceptions.Timeout:
-                    st.warning(f"Timeout for chunk at offset {offset}")
-                    continue
-                    
+                response = requests.get(API_ENDPOINT, params={
+                    "resource_id": RESOURCE_ID,
+                    "limit": min(chunk_size, total_records - offset),
+                    "offset": offset
+                }, timeout=30)
+                if response.status_code == 200:
+                    all_data.extend(response.json()["result"]["records"])
+                else:
+                    st.warning(f"Failed to fetch chunk at offset {offset}")
+
             return all_data
-            
+
         except Exception as e:
             st.error(f"Error fetching data: {str(e)}")
             return None
 
 
+    # --- Data Processing ---
+
+
     def process_unemployment_data(data):
-        """Process and filter unemployment data"""
         if not data:
             return None
-            
+
         df = pd.DataFrame(data)
-        
-        # Filter for Bay Area counties
         df = df[(df["Area Type"] == "County") & (df["Area Name"].isin(bay_area_counties))]
-        
-        # Handle different possible date formats
-        date_column = None
+
+        # Parse date column
         for col in ["Date_Numeric", "Date", "Period", "Month", "Year"]:
             if col in df.columns:
-                date_column = col
+                df["date"] = pd.to_datetime(df[col], errors='coerce')
                 break
-                
-        if not date_column:
-            st.error("No date column found")
-            return None
-            
-        
-        # Try date parsing method
-        df["date"] = None
-        
-        # Date MM/YYYY format
-        try:
-            df["date"] = pd.to_datetime(df[date_column], format="%m/%Y", errors="coerce")
-        except:
-            pass
-            
-        # Remove rows with invalid dates
-        df = df.dropna(subset=["date"])
-        
-        if df.empty:
-            st.error("No valid dates found")
+        else:
+            st.error("No valid date column found.")
             return None
         
-        # Parse unemployment rate
-        if "Unemployment Rate" not in df.columns:
-            st.error("Unemployment Rate column not found")
-            return None
-            
-        df["Unemployment Rate"] = pd.to_numeric(df["Unemployment Rate"], errors="coerce")
-        df = df.dropna(subset=["Unemployment Rate"])
+        df = df.rename(columns={
+            "Area Name": "County",
+            "Labor Force": "LaborForce",
+            "Employment": "Employment",
+            "Unemployment Rate": "UnemploymentRate"
+        })
+
+
+        df = df.sort_values(by=["County", "date"])
+        df = df.drop_duplicates(subset=["County", "date"], keep="first")
         
-        # Keep only the last 10 years of data (continuously updating)
-        latest_date = df["date"].max()
-        ten_years_ago = latest_date - pd.DateOffset(years=10)
-        df = df[df["date"] >= ten_years_ago]
-        
-        # Sort by date
-        df = df.sort_values("date")
-        
+        # Filter for Feb 2020 and onwards
+        cutoff = datetime(2020, 2, 1)
+        df = df[df["date"] >= cutoff]
+
         return df
 
-    # Fetch and process data
-    with st.spinner("Fetching unemployment data..."):
-        raw_data = fetch_unemployment_data()
-        
-        
-    if raw_data:
-        df = process_unemployment_data(raw_data)
-        
-        if df is not None and not df.empty:
-            # Create the plot with 10-year focus
-            fig = px.line(
-                df,
-                x="date",
-                y="Unemployment Rate",
-                color="Area Name",
-                title="Bay Area Unemployment Rate",
-                labels={"date": "Date", "Unemployment Rate": "Unemployment Rate (%)"},
-                line_shape="linear"
-            )
-            
-            # Customize the plot for 10-year view
-            fig.update_layout(
-                legend_title_text='County',
-                hovermode='closest',
-                xaxis_title="Date",
-                yaxis_title="Unemployment Rate (%)",
-                height=600,
-                showlegend=True
+
+    # --- Visualization ---
+
+
+    def show_unemployment_rate_chart(df):
+        st.subheader("Unemployment Rate Trend")
+
+        counties = sorted(df["County"].unique().tolist())
+
+        select_all = st.checkbox("Select all Bay Area Counties", value=True, key="select_all_checkbox")
+
+        # Dropdown to select counties
+        if select_all:
+            selected_counties = counties
+        else:
+            selected_counties = st.multiselect(
+                "Select counties to display:",
+                options = counties,
+                default = []
             )
 
-            fig.update_traces(
-                hovertemplate="<b>%{fullData.name}</b><br>" +
-                             "Date: %{x|%b %Y}<br>" +
-                             "Unemployment Rate: %{y:.1f}%<br>" +
-                             "<extra></extra>"  # Removes the default box around hover
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
-                        
-            # Show current vs 10-year analysis
-            st.subheader("Current vs. 10-Year Analysis")
-            
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                st.write("**Current Rates (Latest Month):**")
-                # Get most recent data for each county
-                latest_data = df.groupby("Area Name")["date"].max().reset_index()
-                latest_data = latest_data.merge(df, on=["Area Name", "date"])
-                latest_data = latest_data.sort_values("Unemployment Rate")
-                
-                st.dataframe(
-                    latest_data[["Area Name", "Unemployment Rate"]].rename(columns={
-                        "Area Name": "County", 
-                        "Unemployment Rate": "Current (%)"
-                    }),
-                    hide_index=True
-                )
-            
-            with col2:
-                st.write("**10-Year Peaks:**")
-                # Find 10-year peaks for each county
-                peak_data = df.groupby("Area Name")["Unemployment Rate"].max().reset_index()
-                peak_data = peak_data.sort_values("Unemployment Rate", ascending=False)
-                
-                st.dataframe(
-                    peak_data.rename(columns={
-                        "Area Name": "County", 
-                        "Unemployment Rate": "Peak (%)"
-                    }),
-                    hide_index=True
-                )
-            
-            with col3:
-                st.write("**10-Year Lows:**")
-                # Find 10-year lows for each county
-                low_data = df.groupby("Area Name")["Unemployment Rate"].min().reset_index()
-                low_data = low_data.sort_values("Unemployment Rate")
-                
-                st.dataframe(
-                    low_data.rename(columns={
-                        "Area Name": "County", 
-                        "Unemployment Rate": "Low (%)"
-                    }),
-                    hide_index=True
-                )
-        else:
-            st.error("Unable to process unemployment data. Please check the API or data format.")
-    else:
-        st.error("Failed to fetch data from CA Open Data Portal.")
+        # Customize which counties to view
+        if not selected_counties:
+            st.info("Please select at least one county.")
+            return
+
+        filtered_df = df[df["County"].isin(selected_counties)]
+        fig = px.line(
+            filtered_df,
+            x = "date",
+            y = "UnemploymentRate",
+            color = "County",
+            title = "Unemployment Rate Over Time"
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    def show_employment_chart(df):
+        st.subheader("Employment Trend")
+        fig = px.line(df, x="date", y="Employment", color="County", title="Employment Over Time")
+        st.plotly_chart(fig, use_container_width=True)
+
+
+    # --- Main Dashboard Block ---
+    if section == "Employment":
+        st.header("Employment")
+
+        selected_tab = st.radio("Choose Employment View:", ["Employment", "Unemployment"], horizontal=True)
+
+        raw_data = fetch_unemployment_data()
+        processed_df = process_unemployment_data(raw_data)
+
+        if processed_df is not None:
+            if selected_tab == "Employment":
+                show_employment_chart(processed_df)
+            elif selected_tab == "Unemployment":
+                show_unemployment_rate_chart(processed_df)
+
+
+
 
 elif section == "Population":
     st.header("Population")
