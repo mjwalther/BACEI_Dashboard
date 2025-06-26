@@ -75,6 +75,9 @@ if section == "Employment":
         df = pd.DataFrame(data)
         df = df[(df["Area Type"] == "County") & (df["Area Name"].isin(bay_area_counties))]
 
+        if "Seasonally Adjusted" in df.columns:
+            df = df[df["Seasonally Adjusted"] == "Y"]
+
         # Parse date column
         for col in ["Date_Numeric", "Date", "Period", "Month", "Year"]:
             if col in df.columns:
