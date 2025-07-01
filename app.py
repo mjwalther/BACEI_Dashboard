@@ -2,14 +2,15 @@ import streamlit as st
 import pandas as pd
 import requests
 import numpy as np
-from datetime import datetime, timedelta
 import plotly.express as px
 import plotly.graph_objects as go
 import os
+from datetime import datetime, timedelta
+from dotenv import load_dotenv
+load_dotenv()
 
 
-# TO DO: Hide API key through .env file
-BLS_API_KEY = "15060bc07890456a95aa5d0076966247"
+BLS_API_KEY = os.getenv("BLS_API_KEY")
 
 # Title
 st.set_page_config(page_title="Bay Area Dashboard", layout="wide")
@@ -146,7 +147,7 @@ if section == "Employment":
         # Parse date column
         for col in ["Date_Numeric", "Date", "Period", "Month", "Year"]:
             if col in df.columns:
-                df["date"] = pd.to_datetime(df[col], errors='coerce')
+                df["date"] = pd.to_datetime(df[col], format="%m/%Y", errors='coerce')
                 break
         else:
             st.error("No valid date column found.")
@@ -190,7 +191,7 @@ if section == "Employment":
                 default = []
             )
 
-        # Customize which counties to view
+        # User personalizes which counties to view
         if not selected_counties:
             st.info("Please select at least one county.")
             return
