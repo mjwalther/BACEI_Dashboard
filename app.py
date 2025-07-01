@@ -10,7 +10,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-BLS_API_KEY = os.getenv("BLS_API_KEY")
+# BLS_API_KEY = os.getenv("BLS_API_KEY")
+BLS_API_KEY= "15060bc07890456a95aa5d0076966247"
 
 # Title
 st.set_page_config(page_title="Bay Area Dashboard", layout="wide")
@@ -129,6 +130,96 @@ if section == "Employment":
         except Exception as e:
             st.error(f"BLS data fetch failed: {e}")
             return None
+        
+
+    @st.cache_data(ttl=86400)
+    def fetch_bay_area_payroll_data():
+        """
+        Fetches and aggregates nonfarm payroll employment data for selected Bay Area regions
+        from the U.S. Bureau of Labor Statistics (BLS).
+
+        Combines multiple MSA/MD series to approximate a regional Bay Area total.
+        Computes percent change in employment relative to February 2020.
+
+        Returns:
+            pd.DataFrame or None: DataFrame with ['date', 'value', 'pct_change'] columns,
+            or None if all data fetches fail.
+        """
+        series_ids = [
+            "SMS06349000000000001",  # Napa MSA
+            "SMS06360840000000001",  # Oakland-Fremont-Hayward MD
+            "SMS06418840000000001",  # San Francisco-San Mateo-Redwood City MD
+            "SMS06419400000000001",  # San Jose-Sunnyvale-Santa Clara MSA
+            "SMS06420340000000001",  # San Rafael MD
+            "SMS06422200000000001",  # Santa Rosa-Petaluma MSA
+            "SMS06467000000000001"   # Vallejo MSA
+        ]
+
+        payload = {
+            "seriesid": series_ids,
+            "startyear": "2020",
+            "endyear": str(datetime.now().year),
+            "registrationKey": BLS_API_KEY
+        }
+
+        try:
+            response = requests.post(
+                "https://api.bls.gov/publicAPI/v2/timeseries/data/",
+                json=payload, timeout=30
+            )
+            data = response.json()
+            if "Results" not in data or "series" not in data["Results"]:
+                st.error("BLS API error: No results returned.")
+                return None
+
+            all_series = []
+            for series in data["Results"]["series"]:
+                if not series["data"]:
+                    st.warning(f"No data found for series ID: {series['seriesID']}")
+                    continue
+                try:
+                    df = pd.DataFrame(series["data"])
+                    df = df[df["period"] != "M13"]  # Exclude annual average rows
+                    df["date"] = pd.to_datetime(df["year"] + df["periodName"], format="%Y%B", errors="coerce")
+
+                    df["value"] = pd.to_numeric(df["value"], errors="coerce") * 1000
+                    df = df[["date", "value"]].sort_values("date")
+                    all_series.append(df)
+                except Exception as e:
+                    st.warning(f"Error processing series {series['seriesID']}: {e}")
+
+            if not all_series:
+                st.error("No Bay Area payroll data could be processed.")
+                return None
+
+            # Merge all series on date by summing values
+            merged_df = all_series[0].copy()
+            for other_df in all_series[1:]:
+                merged_df = pd.merge(merged_df, other_df, on="date", how="outer", suffixes=("", "_x"))
+
+                # If multiple columns named 'value', sum and clean
+                value_cols = [col for col in merged_df.columns if "value" in col]
+                merged_df["value"] = merged_df[value_cols].sum(axis=1, skipna=True)
+                merged_df = merged_df[["date", "value"]]
+
+            merged_df = merged_df.sort_values("date")
+
+            # Baseline = Feb 2020
+            baseline = merged_df.loc[merged_df["date"] == "2020-02-01", "value"]
+            if baseline.empty or pd.isna(baseline.iloc[0]):
+                st.warning("No baseline value found for Bay Area (Feb 2020).")
+                return None
+
+            baseline_value = baseline.iloc[0]
+            merged_df["pct_change"] = (merged_df["value"] / baseline_value - 1) * 100
+
+            return merged_df
+
+        except Exception as e:
+            st.error(f"Failed to fetch Bay Area BLS data: {e}")
+            return None
+
+    
 
 
     # --- Data Processing ---
@@ -228,7 +319,10 @@ if section == "Employment":
         st.plotly_chart(fig, use_container_width=True)
 
 
+
     # --- Main Dashboard Block ---
+
+
     if section == "Employment":
         st.header("Employment")
 
@@ -243,29 +337,98 @@ if section == "Employment":
             elif selected_tab == "Unemployment":
                 show_unemployment_rate_chart(processed_df)
             elif selected_tab == "Job Recovery":
-                st.subheader("Non-Farm Payroll Jobs Recovery from February 2020 to Now")
-                df_nfp = fetch_nonfarm_payroll_data()
-                if df_nfp is not None:
-                    fig = px.line(
-                        df_nfp,
-                        x="date", y="pct_change",
-                        title="Percent Change in Nonfarm Payroll Jobs Since Feb 2020",
-                        labels={"pct_change": "% Change"}
+                st.subheader("Job Recovery from February 2020 to Now")
+
+                df_state = fetch_nonfarm_payroll_data()
+                df_bay = fetch_bay_area_payroll_data()
+
+                if df_state is not None and df_bay is not None:
+                    fig = go.Figure()
+
+                    # California (teal)
+                    fig.add_trace(
+                        go.Scatter(
+                            x=df_state["date"],
+                            y=df_state["pct_change"],
+                            mode="lines",
+                            name="California",
+                            line=dict(color="#00aca2"),
+                            hovertemplate="% Change: %{y:.2f}<extra></extra>"
+                        )
                     )
 
-                    # Highlight most recent point
-                    latest_row = df_nfp.iloc[-1]
-                    fig.add_scatter(
-                        x=[latest_row["date"]],
-                        y=[latest_row["pct_change"]],
-                        mode="markers+text",
-                        marker=dict(color="red", size=10),
-                        text=[f"{latest_row['pct_change']:.2f}%"],
-                        textposition="top center",
-                        name="California"
+                    latest_row = df_state.iloc[-1]
+                    fig.add_trace(
+                        go.Scatter(
+                            x=[latest_row["date"]],
+                            y=[latest_row["pct_change"]],
+                            mode="markers+text",
+                            marker=dict(color="#00aca2", size=10),
+                            text=[f"{latest_row['pct_change']:.2f}%"],
+                            textposition="top center",
+                            name="California",
+                            hoverinfo="skip",
+                            showlegend=False
+                        )
+                    )
+
+                    # Bay Area (dark blue)
+                    fig.add_trace(
+                        go.Scatter(
+                            x=df_bay["date"],
+                            y=df_bay["pct_change"],
+                            mode="lines",
+                            name="Bay Area",
+                            line=dict(color="#203864"),
+                            hovertemplate="% Change: %{y:.2f}<extra></extra>"
+                        )
+                    )
+
+                    latest_bay = df_bay.iloc[-1]
+                    fig.add_trace(
+                        go.Scatter(
+                            x=[latest_bay["date"]],
+                            y=[latest_bay["pct_change"]],
+                            mode="markers+text",
+                            marker=dict(color="#203864", size=10),
+                            text=[f"{latest_bay['pct_change']:.2f}%"],
+                            textposition="top center",
+                            name="Bay Area",
+                            hoverinfo="skip",
+                            showlegend=False
+                        )
+                    )
+
+                    # Layout design
+                    fig.update_layout(
+                        title="Percent Change in Nonfarm Payroll Jobs Since Feb 2020",
+                        xaxis_title="Date",
+                        yaxis_title="% Change Since Feb 2020",
+                        yaxis=dict(
+                            title_font=dict(size=20),   # Y-axis title
+                            tickfont=dict(size=12)      # Y-axis tick labels
+                        ),
+                        xaxis=dict(
+                            tickformat="%b\n%Y",        # Format as "Jan\n2024"
+                            dtick="M1",                 # One tick per month
+                            tickangle=315,              # Keep labels horizontal (adjust for a slant)
+                            title_font=dict(size=20),   # X-axis title
+                            tickfont=dict(size=10)      # X-axis tick labels
+                        ),
+                        hovermode="x unified",
+                        legend=dict(
+                            font=dict(size=20),
+                            title=None,
+                            orientation="v",
+                            yanchor="top",
+                            y=1,
+                            xanchor="left",
+                            x=1
+                        )
                     )
 
                     st.plotly_chart(fig, use_container_width=True)
+
 
 elif section == "Population":
     st.header("Population")
