@@ -135,6 +135,21 @@ if section == "Employment":
 
 
     def process_unemployment_data(data):
+        """
+        Cleans and processes raw employment data from the CA Open Data Portal.
+
+        Filters dataset to include only Bay Area counties and seasonally adjusted county-level data.
+        Parses datetime column from available options. Renames key columns for clarity, sorts data,
+        removes duplicates, and filters records to include only data from Feb 2020 onwards.
+
+        Args:
+            data (list[dict]): Raw records returned from the CA Open Data API.
+
+        Returns:
+            pd.DataFrame or None: A cleaned DataFrame with columns ['County', 'LaborForce', 'Employment',
+            'UnemploymentRate', 'date'], or None if input data is invalid or no valid date column is found.
+        
+        """
         if not data:
             return None
 
@@ -153,6 +168,7 @@ if section == "Employment":
             st.error("No valid date column found.")
             return None
         
+        # Renaming column names
         df = df.rename(columns={
             "Area Name": "County",
             "Labor Force": "LaborForce",
@@ -160,7 +176,7 @@ if section == "Employment":
             "Unemployment Rate": "UnemploymentRate"
         })
 
-
+        # Sort data by County names, then by date
         df = df.sort_values(by=["County", "date"])
         df = df.drop_duplicates(subset=["County", "date"], keep="first")
         
