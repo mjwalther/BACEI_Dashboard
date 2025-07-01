@@ -5,7 +5,13 @@ import numpy as np
 from datetime import datetime, timedelta
 import plotly.express as px
 import plotly.graph_objects as go
+import os
 
+
+# TO DO: Hide API key through .env file
+BLS_API_KEY = "15060bc07890456a95aa5d0076966247"
+
+# Title
 st.set_page_config(page_title="Bay Area Dashboard", layout="wide")
 st.title("Bay Area Economic Dashboard")
 
@@ -15,7 +21,7 @@ section = st.sidebar.selectbox(
     ["Employment", "Population", "Housing", "Investment", "Transit"]
 )
 
-# Main content
+# Main content - selecting an indicator
 if section == "Employment":
 
     bay_area_counties = [
@@ -24,14 +30,22 @@ if section == "Employment":
     "Santa Clara County", "Solano County", "Sonoma County"
     ]
 
-
-
     # --- Data Fetching ---
 
-
-    # Cache data with streamlit for 1 hour
-    @st.cache_data(ttl=3600)
+    # Cache data with streamlit for 24 hours (data will be updated once a day)
+    @st.cache_data(ttl=86400)        
     def fetch_unemployment_data():
+        """
+        Fetches labor force data from the California Open Data Portal (LAUS dataset).
+
+        Gets full dataset in chunks from the API endpoint, handling pagination and connection.
+        Returns a list of records containing monthly employment, unemployment, labor force size,
+        and unemployment rates for California counties.
+
+        Returns:
+            list[dict] or None: A list of record dictionaries if successful, or None if an error occurs.
+
+        """
         API_ENDPOINT = "https://data.ca.gov/api/3/action/datastore_search"
         RESOURCE_ID = "b4bc4656-7866-420f-8d87-4eda4c9996ed"
 
@@ -62,6 +76,57 @@ if section == "Employment":
 
         except Exception as e:
             st.error(f"Error fetching data: {str(e)}")
+            return None
+        
+
+    @st.cache_data(ttl=86400)
+    def fetch_nonfarm_payroll_data():
+        """
+        Fetches seasonally adjusted nonfarm payroll employment data for California from the U.S. Bureau of Labor Statistics (BLS).
+
+        Uses the BLS Public API to retrieve monthly statewide employment figures from 2020 to the present. 
+        The function processes the time series into a pandas DataFrame and computes the percent change in 
+        employment relative to February 2020 (pre-pandemic baseline).
+
+        Returns:
+            pd.DataFrame or None: A DataFrame with columns ['date', 'value', 'pct_change'], where:
+                - 'date' is a datetime object representing the month,
+                - 'value' is the number of jobs (in actual counts),
+                - 'pct_change' is the percent change in employment from February 2020.
+                Returns None if the API call fails or data is missing.
+
+        """
+        SERIES_ID = "SMS06000000000000001"
+        payload = {
+            "seriesid": [SERIES_ID],
+            "startyear": "2020",
+            "endyear": str(datetime.now().year),
+            "registrationKey": BLS_API_KEY
+        }
+
+        try:
+            response = requests.post(
+                "https://api.bls.gov/publicAPI/v2/timeseries/data/",
+                json=payload, timeout=30
+            )
+            data = response.json()
+            if "Results" not in data:
+                st.error("BLS API error: No results returned.")
+                return None
+
+            series = data["Results"]["series"][0]["data"]
+            df = pd.DataFrame(series)
+            df["date"] = pd.to_datetime(df["year"] + df["periodName"], format="%Y%B", errors="coerce")
+            df["value"] = df["value"].astype(float) * 1000
+            df = df[["date", "value"]].sort_values("date")
+
+            baseline = df.loc[df["date"] == "2020-02-01", "value"].iloc[0]
+            df["pct_change"] = (df["value"] / baseline - 1) * 100
+
+            return df
+        
+        except Exception as e:
+            st.error(f"BLS data fetch failed: {e}")
             return None
 
 
@@ -150,7 +215,7 @@ if section == "Employment":
     if section == "Employment":
         st.header("Employment")
 
-        selected_tab = st.radio("Choose Employment View:", ["Employment", "Unemployment"], horizontal=True)
+        selected_tab = st.radio("Choose Employment View:", ["Employment", "Unemployment", "Job Recovery"], horizontal=True)
 
         raw_data = fetch_unemployment_data()
         processed_df = process_unemployment_data(raw_data)
@@ -160,9 +225,30 @@ if section == "Employment":
                 show_employment_chart(processed_df)
             elif selected_tab == "Unemployment":
                 show_unemployment_rate_chart(processed_df)
+            elif selected_tab == "Job Recovery":
+                st.subheader("Non-Farm Payroll Jobs Recovery from February 2020 to Now")
+                df_nfp = fetch_nonfarm_payroll_data()
+                if df_nfp is not None:
+                    fig = px.line(
+                        df_nfp,
+                        x="date", y="pct_change",
+                        title="Percent Change in Nonfarm Payroll Jobs Since Feb 2020",
+                        labels={"pct_change": "% Change"}
+                    )
 
+                    # Highlight most recent point
+                    latest_row = df_nfp.iloc[-1]
+                    fig.add_scatter(
+                        x=[latest_row["date"]],
+                        y=[latest_row["pct_change"]],
+                        mode="markers+text",
+                        marker=dict(color="red", size=10),
+                        text=[f"{latest_row['pct_change']:.2f}%"],
+                        textposition="top center",
+                        name="California"
+                    )
 
-
+                    st.plotly_chart(fig, use_container_width=True)
 
 elif section == "Population":
     st.header("Population")
