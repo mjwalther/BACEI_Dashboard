@@ -10,6 +10,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+
+# TO-DO
+# 1. Remove Bay Area counties from the count of California in Jobs Recovery to make it "Rest of California"
+# 2. Add United States metric to Jobs Recovery
+# 3. Fix x-axis to include only months up to present, not future months
+# 4. Make drop-down for selecting different counties / regions
+
+
 # BLS_API_KEY = os.getenv("BLS_API_KEY")
 BLS_API_KEY= "15060bc07890456a95aa5d0076966247"
 
