@@ -12,10 +12,8 @@ load_dotenv()
 
 
 # TO-DO
-# 1. Remove Bay Area counties from the count of California in Jobs Recovery to make it "Rest of California"
-# 2. Add United States metric to Jobs Recovery
-# 3. Fix x-axis to include only months up to present, not future months
-# 4. Make drop-down for selecting different counties / regions
+# 1. Make drop-down for selecting different counties / regions
+# 2. Confirm which Series IDs for "Rest of CA" are good with Abby
 
 
 # BLS_API_KEY = os.getenv("BLS_API_KEY")
@@ -90,7 +88,7 @@ if section == "Employment":
         
 
     @st.cache_data(ttl=86400)
-    def fetch_nonfarm_payroll_data():
+    def fetch_rest_of_ca_payroll_data():
         """
         Fetches seasonally adjusted nonfarm payroll employment data for California from the U.S. Bureau of Labor Statistics (BLS).
 
@@ -106,9 +104,34 @@ if section == "Employment":
                 Returns None if the API call fails or data is missing.
 
         """
-        SERIES_ID = "SMS06000000000000001"
+
+        rest_of_ca_series_ids = [
+            "SMS06112440000000001",  # Anaheim-Santa Ana-Irvine, CA (MD)
+            "SMS06125400000000001",  # Bakersfield-Delano, CA
+            "SMS06170200000000001",  # Chico, CA
+            "SMS06209400000000001",  # El Centro, CA
+            "SMS06234200000000001",  # Fresno, CA
+            "SMS06252600000000001",  # Hanford-Corcoran, CA
+            "SMS06310800000000001",  # Los Angeles-Long Beach-Anaheim, CA
+            # "SMS06310840000000001",  # Los Angeles-Long Beach-Glendale, CA (MD)
+            "SMS06329000000000001",  # Merced, CA
+            "SMS06337000000000001",  # Modesto, CA
+            "SMS06371000000000001",  # Oxnard-Thousand Oaks-Ventura, CA
+            "SMS06398200000000001",  # Redding, CA
+            "SMS06401400000000001",  # Riverside-San Bernardino-Ontario, CA
+            "SMS06409000000000001",  # Sacramento-Roseville-Folsom, CA
+            "SMS06415000000000001",  # Salinas, CA
+            "SMS06417400000000001",  # San Diego-Chula Vista-Carlsbad, CA
+            "SMS06420200000000001",  # San Luis Obispo-Paso Robles, CA
+            "SMS06421000000000001",  # Santa Cruz-Watsonville, CA
+            "SMS06422000000000001",  # Santa Maria-Santa Barbara, CA
+            "SMS06447000000000001",  # Stockton-Lodi, CA
+            "SMS06473000000000001",  # Visalia, CA
+            "SMS06497000000000001",  # Yuba City, CA
+        ]
+
         payload = {
-            "seriesid": [SERIES_ID],
+            "seriesid": rest_of_ca_series_ids,
             "startyear": "2020",
             "endyear": str(datetime.now().year),
             "registrationKey": BLS_API_KEY
@@ -120,23 +143,37 @@ if section == "Employment":
                 json=payload, timeout=30
             )
             data = response.json()
-            if "Results" not in data:
-                st.error("BLS API error: No results returned.")
+            if "Results" not in data or "series" not in data["Results"]:
+                st.error("BLS API error: No results returned for Rest of CA.")
                 return None
 
-            series = data["Results"]["series"][0]["data"]
-            df = pd.DataFrame(series)
-            df["date"] = pd.to_datetime(df["year"] + df["periodName"], format="%Y%B", errors="coerce")
-            df["value"] = df["value"].astype(float) * 1000
-            df = df[["date", "value"]].sort_values("date")
+            all_series = []
+            for series in data["Results"]["series"]:
+                df = pd.DataFrame(series["data"])
+                df = df[df["period"] != "M13"]
+                df["date"] = pd.to_datetime(df["year"] + df["periodName"], format="%Y%B", errors="coerce")
+                df["value"] = pd.to_numeric(df["value"], errors="coerce") * 1000
+                df = df[["date", "value"]].sort_values("date")
+                all_series.append(df)
 
-            baseline = df.loc[df["date"] == "2020-02-01", "value"].iloc[0]
-            df["pct_change"] = (df["value"] / baseline - 1) * 100
+            merged_df = all_series[0].copy()
+            for other_df in all_series[1:]:
+                merged_df = pd.merge(merged_df, other_df, on="date", how="outer", suffixes=("", "_x"))
+                value_cols = [col for col in merged_df.columns if "value" in col]
+                merged_df["value"] = merged_df[value_cols].sum(axis=1, skipna=True)
+                merged_df = merged_df[["date", "value"]]
 
-            return df
-        
+            baseline = merged_df.loc[merged_df["date"] == "2020-02-01", "value"]
+            if baseline.empty or pd.isna(baseline.iloc[0]):
+                st.warning("Missing baseline for Rest of CA.")
+                return None
+
+            baseline_value = baseline.iloc[0]
+            merged_df["pct_change"] = (merged_df["value"] / baseline_value - 1) * 100
+            return merged_df
+
         except Exception as e:
-            st.error(f"BLS data fetch failed: {e}")
+            st.error(f"Failed to fetch Rest of CA data: {e}")
             return None
         
 
@@ -226,7 +263,47 @@ if section == "Employment":
         except Exception as e:
             st.error(f"Failed to fetch Bay Area BLS data: {e}")
             return None
+        
 
+    @st.cache_data(ttl=86400)
+    def fetch_us_payroll_data():
+        """
+        Fetches national-level seasonally adjusted nonfarm payroll employment data for the U.S.
+        Computes percent change in employment relative to February 2020.
+        """
+        SERIES_ID = "CES0000000001"  # U.S. nonfarm payroll, seasonally adjusted
+        payload = {
+            "seriesid": [SERIES_ID],
+            "startyear": "2020",
+            "endyear": str(datetime.now().year),
+            "registrationKey": BLS_API_KEY
+        }
+
+        try:
+            response = requests.post(
+                "https://api.bls.gov/publicAPI/v2/timeseries/data/",
+                json=payload,
+                timeout=30
+            )
+            data = response.json()
+            if "Results" not in data:
+                st.error("No results returned from BLS for U.S.")
+                return None
+
+            series = data["Results"]["series"][0]["data"]
+            df = pd.DataFrame(series)
+            df["date"] = pd.to_datetime(df["year"] + df["periodName"], format="%Y%B", errors="coerce")
+            df["value"] = df["value"].astype(float) * 1000
+            df = df[["date", "value"]].sort_values("date")
+
+            baseline = df.loc[df["date"] == "2020-02-01", "value"].iloc[0]
+            df["pct_change"] = (df["value"] / baseline - 1) * 100
+
+            return df
+
+        except Exception as e:
+            st.error(f"Failed to fetch U.S. payroll data: {e}")
+            return None
     
 
 
@@ -338,6 +415,7 @@ if section == "Employment":
 
         raw_data = fetch_unemployment_data()
         processed_df = process_unemployment_data(raw_data)
+        
 
         if processed_df is not None:
             if selected_tab == "Employment":
@@ -347,19 +425,48 @@ if section == "Employment":
             elif selected_tab == "Job Recovery":
                 st.subheader("Job Recovery from February 2020 to Now")
 
-                df_state = fetch_nonfarm_payroll_data()
+                df_state = fetch_rest_of_ca_payroll_data()
                 df_bay = fetch_bay_area_payroll_data()
+                df_us = fetch_us_payroll_data()
 
-                if df_state is not None and df_bay is not None:
+
+                if df_state is not None and df_bay is not None and df_us is not None:
                     fig = go.Figure()
 
-                    # California (teal)
+                    # U.S. (gray)
+                    fig.add_trace(
+                        go.Scatter(
+                            x=df_us["date"],
+                            y=df_us["pct_change"],
+                            mode="lines",
+                            name="United States",
+                            line=dict(color="#888888"),
+                            hovertemplate="% Change: %{y:.2f}<extra></extra>"
+                        )
+                    )
+
+                    latest_us = df_us.iloc[-1]
+                    fig.add_trace(
+                        go.Scatter(
+                            x=[latest_us["date"]],
+                            y=[latest_us["pct_change"]],
+                            mode="markers+text",
+                            marker=dict(color="#888888", size=10),
+                            text=[f"{latest_us['pct_change']:.2f}%"],
+                            textposition="top center",
+                            name="United States",
+                            hoverinfo="skip",
+                            showlegend=False
+                        )
+                    )
+
+                    # Rest of California (teal)
                     fig.add_trace(
                         go.Scatter(
                             x=df_state["date"],
                             y=df_state["pct_change"],
                             mode="lines",
-                            name="California",
+                            name="Rest of California",
                             line=dict(color="#00aca2"),
                             hovertemplate="% Change: %{y:.2f}<extra></extra>"
                         )
@@ -408,20 +515,23 @@ if section == "Employment":
                     )
 
                     # Layout design
+                    latest_date = max(df_state["date"].max(), df_bay["date"].max())
+                    buffered_latest = latest_date + timedelta(days=25)
                     fig.update_layout(
                         title="Percent Change in Nonfarm Payroll Jobs Since Feb 2020",
                         xaxis_title="Date",
                         yaxis_title="% Change Since Feb 2020",
-                        yaxis=dict(
-                            title_font=dict(size=20),   # Y-axis title
-                            tickfont=dict(size=12)      # Y-axis tick labels
-                        ),
                         xaxis=dict(
                             tickformat="%b\n%Y",        # Format as "Jan\n2024"
                             dtick="M1",                 # One tick per month
-                            tickangle=315,              # Keep labels horizontal (adjust for a slant)
+                            tickangle=0,              # Keep labels horizontal (adjust for a slant)
                             title_font=dict(size=20),   # X-axis title
-                            tickfont=dict(size=10)      # X-axis tick labels
+                            tickfont=dict(size=10),      # X-axis tick labels
+                            range=["2020-02-01", buffered_latest.strftime("%Y-%m-%d")]
+                        ),
+                        yaxis=dict(
+                            title_font=dict(size=20),   # Y-axis title
+                            tickfont=dict(size=12)      # Y-axis tick labels
                         ),
                         hovermode="x unified",
                         legend=dict(
