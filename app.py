@@ -13,7 +13,6 @@ load_dotenv()
 
 # TO-DO
 # 1. Make drop-down for selecting different counties / regions
-# 2. Confirm which Series IDs for "Rest of CA" are good with Abby
 
 
 # BLS_API_KEY = os.getenv("BLS_API_KEY")
@@ -106,14 +105,12 @@ if section == "Employment":
         """
 
         rest_of_ca_series_ids = [
-            "SMS06112440000000001",  # Anaheim-Santa Ana-Irvine, CA (MD)
             "SMS06125400000000001",  # Bakersfield-Delano, CA
             "SMS06170200000000001",  # Chico, CA
             "SMS06209400000000001",  # El Centro, CA
             "SMS06234200000000001",  # Fresno, CA
             "SMS06252600000000001",  # Hanford-Corcoran, CA
             "SMS06310800000000001",  # Los Angeles-Long Beach-Anaheim, CA
-            # "SMS06310840000000001",  # Los Angeles-Long Beach-Glendale, CA (MD)
             "SMS06329000000000001",  # Merced, CA
             "SMS06337000000000001",  # Modesto, CA
             "SMS06371000000000001",  # Oxnard-Thousand Oaks-Ventura, CA
@@ -431,6 +428,13 @@ if section == "Employment":
 
 
                 if df_state is not None and df_bay is not None and df_us is not None:
+                    # Find latest common month of data available for aesthetics
+                    latest_common_date = min(df_state["date"].max(), df_bay["date"].max(), df_us["date"].max())
+                    df_state = df_state[df_state["date"] <= latest_common_date]
+                    df_bay = df_bay[df_bay["date"] <= latest_common_date]
+                    df_us = df_us[df_us["date"] <= latest_common_date]
+
+
                     fig = go.Figure()
 
                     # U.S. (gray)
@@ -515,8 +519,8 @@ if section == "Employment":
                     )
 
                     # Layout design
-                    latest_date = max(df_state["date"].max(), df_bay["date"].max())
-                    buffered_latest = latest_date + timedelta(days=25)
+                    latest_date = max(df_state["date"].max(), df_bay["date"].max(), df_us["date"].max())
+                    buffered_latest = latest_date + timedelta(days=30)
                     fig.update_layout(
                         title="Percent Change in Nonfarm Payroll Jobs Since Feb 2020",
                         xaxis_title="Date",
@@ -524,9 +528,9 @@ if section == "Employment":
                         xaxis=dict(
                             tickformat="%b\n%Y",        # Format as "Jan\n2024"
                             dtick="M1",                 # One tick per month
-                            tickangle=0,              # Keep labels horizontal (adjust for a slant)
+                            tickangle=0,                # Keep labels horizontal (adjust for a slant)
                             title_font=dict(size=20),   # X-axis title
-                            tickfont=dict(size=10),      # X-axis tick labels
+                            tickfont=dict(size=10),     # X-axis tick labels
                             range=["2020-02-01", buffered_latest.strftime("%Y-%m-%d")]
                         ),
                         yaxis=dict(
