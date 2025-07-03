@@ -9,14 +9,66 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 load_dotenv()
 
-
-
-# TO-DO
-# 1. Make drop-down for selecting different counties / regions
-
-
 # BLS_API_KEY = os.getenv("BLS_API_KEY")
 BLS_API_KEY= "15060bc07890456a95aa5d0076966247"
+
+# Mapping of U.S. states to BLS nonfarm payroll series IDs (seasonally adjusted)
+state_code_map = {
+    "Alabama": "SMS01000000000000001",
+    "Alaska": "SMS02000000000000001",
+    "Arizona": "SMS04000000000000001",
+    "Arkansas": "SMS05000000000000001",
+    "California": "SMS06000000000000001",
+    "Colorado": "SMS08000000000000001",
+    "Connecticut": "SMS09000000000000001",
+    "Delaware": "SMS10000000000000001",
+    "District of Columbia": "SMS11000000000000001",
+    "Florida": "SMS12000000000000001",
+    "Georgia": "SMS13000000000000001",
+    "Hawaii": "SMS15000000000000001",
+    "Idaho": "SMS16000000000000001",
+    "Illinois": "SMS17000000000000001",
+    "Indiana": "SMS18000000000000001",
+    "Iowa": "SMS19000000000000001",
+    "Kansas": "SMS20000000000000001",
+    "Kentucky": "SMS21000000000000001",
+    "Louisiana": "SMS22000000000000001",
+    "Maine": "SMS23000000000000001",
+    "Maryland": "SMS24000000000000001",
+    "Massachusetts": "SMS25000000000000001",
+    "Michigan": "SMS26000000000000001",
+    "Minnesota": "SMS27000000000000001",
+    "Mississippi": "SMS28000000000000001",
+    "Missouri": "SMS29000000000000001",
+    "Montana": "SMS30000000000000001",
+    "Nebraska": "SMS31000000000000001",
+    "Nevada": "SMS32000000000000001",
+    "New Hampshire": "SMS33000000000000001",
+    "New Jersey": "SMS34000000000000001",
+    "New Mexico": "SMS35000000000000001",
+    "New York": "SMS36000000000000001",
+    "North Carolina": "SMS37000000000000001",
+    "North Dakota": "SMS38000000000000001",
+    "Ohio": "SMS39000000000000001",
+    "Oklahoma": "SMS40000000000000001",
+    "Oregon": "SMS41000000000000001",
+    "Pennsylvania": "SMS42000000000000001",
+    "Rhode Island": "SMS44000000000000001",
+    "South Carolina": "SMS45000000000000001",
+    "South Dakota": "SMS46000000000000001",
+    "Tennessee": "SMS47000000000000001",
+    "Texas": "SMS48000000000000001",
+    "Utah": "SMS49000000000000001",
+    "Vermont": "SMS50000000000000001",
+    "Virginia": "SMS51000000000000001",
+    "Washington": "SMS53000000000000001",
+    "West Virginia": "SMS54000000000000001",
+    "Wisconsin": "SMS55000000000000001",
+    "Wyoming": "SMS56000000000000001"
+    # "Puerto Rico": "SMS72000000000000001",
+    # "Virign Islands": "SMS78000000000000001"
+}
+
 
 # Title
 st.set_page_config(page_title="Bay Area Dashboard", layout="wide")
@@ -301,8 +353,66 @@ if section == "Employment":
         except Exception as e:
             st.error(f"Failed to fetch U.S. payroll data: {e}")
             return None
-    
 
+
+
+    @st.cache_data(ttl=86400)
+    def fetch_states_job_data(series_ids):
+        from math import ceil
+
+        def chunk_list(lst, size):
+            return [lst[i:i+size] for i in range(0, len(lst), size)]
+
+        chunks = chunk_list(series_ids, 25)  # Safe limit per API docs
+        all_dfs = []
+        received_ids = set()
+
+        for chunk in chunks:
+            payload = {
+                "seriesid": chunk,
+                "startyear": "2020",
+                "endyear": str(datetime.now().year),
+                "registrationKey": BLS_API_KEY
+            }
+
+            try:
+                response = requests.post(
+                    "https://api.bls.gov/publicAPI/v2/timeseries/data/",
+                    json=payload,
+                    timeout=30
+                )
+                data = response.json()
+                for series in data.get("Results", {}).get("series", []):
+                    sid = series["seriesID"]
+                    received_ids.add(sid)
+                    state_name = next((name for name, code in state_code_map.items() if code == sid), sid)
+                    if not series["data"]:
+                        st.warning(f"No data returned for {state_name}.")
+                        continue
+
+                    df = pd.DataFrame(series["data"])
+                    df = df[df["period"] != "M13"]
+                    df["date"] = pd.to_datetime(df["year"] + df["periodName"], format="%Y%B", errors="coerce")
+                    df["value"] = pd.to_numeric(df["value"], errors="coerce") * 1000
+                    df = df[["date", "value"]].sort_values("date")
+
+                    baseline = df.loc[df["date"] == "2020-02-01", "value"]
+                    if not baseline.empty:
+                        df["pct_change"] = (df["value"] / baseline.iloc[0] - 1) * 100
+                        df["State"] = state_name
+                        all_dfs.append(df)
+
+            except Exception as e:
+                st.error(f"Error fetching chunk: {e}")
+
+        missing = set(series_ids) - received_ids
+        for sid in missing:
+            state_name = next((name for name, code in state_code_map.items() if code == sid), sid)
+            st.warning(f"BLS API did not return data for {state_name}.")
+
+        return pd.concat(all_dfs, ignore_index=True) if all_dfs else None
+
+    
 
     # --- Data Processing ---
 
@@ -550,6 +660,88 @@ if section == "Employment":
                     )
 
                     st.plotly_chart(fig, use_container_width=True)
+
+
+                # US States Job Recovery Chart
+                st.subheader("Job Recovery by State Since February 2020")
+                
+                all_states = list(state_code_map.keys())
+                select_all_states = st.checkbox("Select All States", value=False)
+
+                if select_all_states:
+                    selected_states = st.multiselect(
+                        "Choose states to compare:",
+                        options=all_states,
+                        default=all_states,
+                        key="states_multiselect"
+                    )
+                else:
+                    selected_states = st.multiselect(
+                        "Choose states to compare:",
+                        options=all_states,
+                        default=["California"],  # Default starting state
+                        key="states_multiselect"
+                    )
+
+                state_series_ids = [state_code_map[state] for state in selected_states]
+                df_states = fetch_states_job_data(state_series_ids)
+
+
+                if df_states is not None and not df_states.empty:
+                    fig_states = px.line(
+                        df_states,
+                        x="date",
+                        y="pct_change",
+                        color="State",
+                        title="Percent Change in Nonfarm Payroll Jobs Since Feb 2020 by State"
+                    )
+
+                    # Extract color mapping from base figure
+                    color_map = {trace.name: trace.line.color for trace in fig_states.data}
+
+                    # Add markers for latest data points, with matching color
+                    for state in selected_states:
+                        state_df = df_states[df_states["State"] == state].sort_values("date")
+                        if not state_df.empty:
+                            latest_row = state_df.iloc[-1]
+                            fig_states.add_trace(
+                                go.Scatter(
+                                    x=[latest_row["date"]],
+                                    y=[latest_row["pct_change"]],
+                                    mode="markers+text",
+                                    marker=dict(size=10, color=color_map.get(state, "#000000")),
+                                    text=[f"{latest_row['pct_change']:.2f}%"],
+                                    textposition="top center",
+                                    name=state,
+                                    showlegend=False
+                                )
+                            )
+                        else:
+                            st.warning(f"No data available for {state}.")
+
+                    # Extend x-axis just a bit
+                    max_date = df_states["date"].max() + timedelta(days=25)
+                    fig_states.update_layout(
+                        xaxis_title="Date",
+                        yaxis_title="% Change Since Feb 2020",
+                        xaxis=dict(
+                            tickformat="%b\n%Y",
+                            dtick="M1",
+                            tickangle=0,
+                            range=["2020-02-01", max_date.strftime("%Y-%m-%d")]
+                        ),
+                        yaxis=dict(
+                            title_font=dict(size=20),
+                            tickfont=dict(size=12)
+                        ),
+                        hovermode="x unified",
+                        legend=dict(
+                            font=dict(size=14),
+                            title=None
+                        )
+                    )
+                    st.plotly_chart(fig_states, use_container_width=True)
+            
 
 
 elif section == "Population":
