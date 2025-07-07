@@ -529,7 +529,6 @@ if section == "Employment":
     if section == "Employment":
         st.header("Employment")
 
-        # selected_tab = st.radio("Choose Employment View:", ["Employment", "Unemployment", "Job Recovery", "Monthly Job Change"], horizontal=True)
 
         raw_data = fetch_unemployment_data()
         processed_df = process_unemployment_data(raw_data)
@@ -706,6 +705,7 @@ if section == "Employment":
                         title="Percent Change in Nonfarm Payroll Jobs Since Feb 2020 by State"
                     )
 
+
                     # Extract color mapping from base figure
                     color_map = {trace.name: trace.line.color for trace in fig_states.data}
 
@@ -723,6 +723,7 @@ if section == "Employment":
                                     text=[f"{latest_row['pct_change']:.2f}%"],
                                     textposition="top center",
                                     name=state,
+                                    hoverinfo="skip",
                                     showlegend=False
                                 )
                             )
@@ -731,6 +732,10 @@ if section == "Employment":
 
                     # Extend x-axis just a bit
                     max_date = df_states["date"].max() + timedelta(days=25)
+                    
+                    # Dynamically adjust hovermode based on number of selected states
+                    hover_mode = "x unified" if len(selected_states) <= 10 else "closest"
+
                     fig_states.update_layout(
                         xaxis_title="Date",
                         yaxis_title="% Change Since Feb 2020",
@@ -746,12 +751,7 @@ if section == "Employment":
                             title_font=dict(size=20),
                             tickfont=dict(size=12)
                         ),
-                        # hovermode="x unified",
-                        # legend=dict(
-                        #     font=dict(size=14),
-                        #     title=None
-                        # )
-                        hovermode="x unified",
+                        hovermode=hover_mode,
                         legend=dict(
                             font=dict(size=20),
                             title=None,
@@ -762,9 +762,32 @@ if section == "Employment":
                             x=1
                         )
                     )
+
+                    # Customize hover template only for the main lines
+                    for trace in fig_states.data:
+                        if "lines" in trace.mode:
+                            trace.hovertemplate = "% Change: %{y:.2f}<extra></extra>"
+                        else:
+                            trace.hovertemplate = ""  # hide hover for marker-only traces
+
+
+                    # Adjust hovermode based on number of selected states
+                    if len(selected_states) > 10:
+                        fig_states.update_layout(hovermode="closest")
+                    else:
+                        fig_states.update_layout(hovermode="x unified")
+
+                    # Adjust hovertemplate per trace
+                    for trace in fig_states.data:
+                        if len(selected_states) > 10:
+                            trace.hovertemplate = trace.name + "<br>% Change: %{y:.2f}%<extra></extra>"
+                        else:
+                            trace.hovertemplate = "% Change: %{y:.2f}%<extra></extra>"
+
                     st.plotly_chart(fig_states, use_container_width=True)
 
             elif subtab == "Monthly Job Change":
+                # --- Monthly Job Change in the SF/San Mateo Subregion ---
                 st.subheader("Monthly Job Change in SF/San Mateo Subregion")
 
                 # --- Fetch data from BLS for SF/San Mateo MD ---
@@ -794,17 +817,14 @@ if section == "Employment":
                         # Compute monthly job change
                         df["monthly_change"] = df["value"].diff()
                         
-                        # Drop rows with NaN in monthly_change (usually just the first row)
+                        # Drop rows with NaN in monthly_change (Just the first row - Feb 2020)
                         df = df.dropna(subset=["monthly_change"])
 
-                        # Add formatted labels and colors
                         df["label"] = df["monthly_change"].apply(
                             lambda x: f"{int(x/1000)}K" if abs(x) >= 1000 else f"{int(x)}"
                         )
                         df["color"] = df["monthly_change"].apply(lambda x: "#00aca2" if x >= 0 else "#e63946")
 
-
-                        # --- Plotly Chart ---
                         fig = go.Figure()
                         fig.add_trace(go.Bar(
                             x=df["date"],
@@ -812,7 +832,8 @@ if section == "Employment":
                             marker_color=df["color"],
                             text=df["label"],
                             textposition="outside",
-                            name="SF/San Mateo MD"
+                            name="SF/San Mateo MD",
+                            hovertemplate="%{x|%B %Y}<br>Change: %{y:,.0f} Jobs<extra></extra>"
                         ))
 
                         fig.update_layout(
@@ -824,6 +845,7 @@ if section == "Employment":
                                 tickformat="%b\n%Y",
                                 dtick="M1",
                                 tickangle=0,
+                                title_font=dict(size=20),
                                 tickfont=dict(size=10)
                             ),
                             yaxis=dict(tickfont=dict(size=12),
@@ -838,7 +860,7 @@ if section == "Employment":
                     st.error(f"Failed to fetch or render chart: {e}")            
 
 
-                # --- Monthly Job Change in the Bay Area (Bar Chart) ---
+                # --- Monthly Job Change in the Bay Area ---
                 st.subheader("Monthly Job Change in the Bay Area")
 
                 # Use existing Bay Area data from fetch_bay_area_payroll_data
@@ -865,7 +887,8 @@ if section == "Employment":
                     marker_color=df_bay_monthly["color"],
                     text=df_bay_monthly["label"],
                     textposition="outside",
-                    name="Bay Area Monthly Job Change"
+                    name="Bay Area Monthly Job Change",
+                    hovertemplate="%{x|%B %Y}<br>Change: %{y:,.0f} Jobs<extra></extra>"
                 ))
 
                 fig_monthly.update_layout(
@@ -877,6 +900,7 @@ if section == "Employment":
                         tickformat="%b\n%Y",
                         dtick="M1",
                         tickangle=0,
+                        title_font=dict(size=20),
                         tickfont=dict(size=10)
                     ),
                     yaxis=dict(tickfont=dict(size=12),
