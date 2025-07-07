@@ -74,11 +74,23 @@ state_code_map = {
 st.set_page_config(page_title="Bay Area Dashboard", layout="wide")
 st.title("Bay Area Economic Dashboard")
 
+
+# --- Sidebar Layout ---
+st.sidebar.header("Bay Area Dashboard Navigation")
+
 # Sidebar dropdown
 section = st.sidebar.selectbox(
     "Select Indicator:",
     ["Employment", "Population", "Housing", "Investment", "Transit"]
 )
+
+subtab = None
+if section == "Employment":
+    subtab = st.sidebar.radio(
+        "Employment Views:",
+        ["Employment", "Unemployment", "Job Recovery", "Monthly Job Change"],
+        key="employment_subtab"
+    )
 
 # Main content - selecting an indicator
 if section == "Employment":
@@ -508,7 +520,7 @@ if section == "Employment":
     def show_employment_chart(df):
         st.subheader("Employment Trend")
         fig = px.line(df, x="date", y="Employment", color="County", title="Employment Over Time")
-        st.plotly_chart(fig, use_container_width=True
+        st.plotly_chart(fig, use_container_width=True)
 
 
     # --- Main Dashboard Block ---
@@ -517,24 +529,23 @@ if section == "Employment":
     if section == "Employment":
         st.header("Employment")
 
-        selected_tab = st.radio("Choose Employment View:", ["Employment", "Unemployment", "Job Recovery"], horizontal=True)
+        # selected_tab = st.radio("Choose Employment View:", ["Employment", "Unemployment", "Job Recovery", "Monthly Job Change"], horizontal=True)
 
         raw_data = fetch_unemployment_data()
         processed_df = process_unemployment_data(raw_data)
-        
+
+        df_state = fetch_rest_of_ca_payroll_data()
+        df_bay = fetch_bay_area_payroll_data()
+        df_us = fetch_us_payroll_data()
+  
 
         if processed_df is not None:
-            if selected_tab == "Employment":
+            if subtab == "Employment":
                 show_employment_chart(processed_df)
-            elif selected_tab == "Unemployment":
+            elif subtab == "Unemployment":
                 show_unemployment_rate_chart(processed_df)
-            elif selected_tab == "Job Recovery":
+            elif subtab == "Job Recovery":
                 st.subheader("Job Recovery Since February 2020")
-
-                df_state = fetch_rest_of_ca_payroll_data()
-                df_bay = fetch_bay_area_payroll_data()
-                df_us = fetch_us_payroll_data()
-
 
                 if df_state is not None and df_bay is not None and df_us is not None:
                     # Find latest common month of data available for aesthetics
@@ -752,7 +763,128 @@ if section == "Employment":
                         )
                     )
                     st.plotly_chart(fig_states, use_container_width=True)
-            
+
+            elif subtab == "Monthly Job Change":
+                st.subheader("Monthly Job Change in SF/San Mateo Subregion")
+
+                # --- Fetch data from BLS for SF/San Mateo MD ---
+                series_id = "SMS06418840000000001"
+                payload = {
+                    "seriesid": [series_id],
+                    "startyear": "2020",
+                    "endyear": str(datetime.now().year),
+                    "registrationKey": BLS_API_KEY
+                }
+
+                try:
+                    response = requests.post("https://api.bls.gov/publicAPI/v2/timeseries/data/", json=payload, timeout=30)
+                    data = response.json()
+
+                    if "Results" in data and data["Results"]["series"]:
+                        series = data["Results"]["series"][0]["data"]
+                        df = pd.DataFrame(series)
+                        df = df[df["period"] != "M13"]  # Remove annual averages
+                        df["date"] = pd.to_datetime(df["year"] + df["periodName"], format="%Y%B", errors="coerce")
+                        df["value"] = pd.to_numeric(df["value"], errors="coerce") * 1000
+                        df = df.sort_values("date")
+
+                        # Filter for Feb 2020 onward
+                        df = df[df["date"] >= "2020-02-01"]
+
+                        # Compute monthly job change
+                        df["monthly_change"] = df["value"].diff()
+                        
+                        # Drop rows with NaN in monthly_change (usually just the first row)
+                        df = df.dropna(subset=["monthly_change"])
+
+                        # Add formatted labels and colors
+                        df["label"] = df["monthly_change"].apply(
+                            lambda x: f"{int(x/1000)}K" if abs(x) >= 1000 else f"{int(x)}"
+                        )
+                        df["color"] = df["monthly_change"].apply(lambda x: "#00aca2" if x >= 0 else "#e63946")
+
+
+                        # --- Plotly Chart ---
+                        fig = go.Figure()
+                        fig.add_trace(go.Bar(
+                            x=df["date"],
+                            y=df["monthly_change"],
+                            marker_color=df["color"],
+                            text=df["label"],
+                            textposition="outside",
+                            name="SF/San Mateo MD"
+                        ))
+
+                        fig.update_layout(
+                            title="Monthly Job Change in SF/San Mateo Metropolitan Division Subregion Since February 2020",
+                            xaxis_title="Month",
+                            yaxis_title="Job Change",
+                            showlegend=False,
+                            xaxis=dict(
+                                tickformat="%b\n%Y",
+                                dtick="M1",
+                                tickangle=0,
+                                tickfont=dict(size=10)
+                            ),
+                            yaxis=dict(tickfont=dict(size=12),
+                                       range=[-20000, 25000]),
+                            margin=dict(t=50, b=50),
+                        )
+
+                        st.plotly_chart(fig, use_container_width=True)
+                    else:
+                        st.warning("No data returned from BLS for SF/San Mateo MD.")
+                except Exception as e:
+                    st.error(f"Failed to fetch or render chart: {e}")            
+
+
+                # --- Monthly Job Change in the Bay Area (Bar Chart) ---
+                st.subheader("Monthly Job Change in the Bay Area")
+
+                # Use existing Bay Area data from fetch_bay_area_payroll_data
+                df_bay_monthly = df_bay.copy()
+                df_bay_monthly = df_bay_monthly.sort_values("date")
+
+                # Compute monthly change (difference from previous month)
+                df_bay_monthly["monthly_change"] = df_bay_monthly["value"].diff()
+
+                # Drop February 2020 row so March becomes the first point (March shows change from Feb)
+                df_bay_monthly = df_bay_monthly[df_bay_monthly["date"] >= pd.to_datetime("2020-03-01")]
+                df_bay_monthly["label"] = df_bay_monthly["monthly_change"].apply(
+                    lambda x: f"{int(x/1000)}K" if abs(x) >= 1000 else f"{int(x)}"
+                )
+                df_bay_monthly["color"] = df_bay_monthly["monthly_change"].apply(
+                    lambda x: "#00aca2" if x >= 0 else "#e63946"
+                )
+
+                # Bar chart with custom labels
+                fig_monthly = go.Figure()
+                fig_monthly.add_trace(go.Bar(
+                    x=df_bay_monthly["date"],
+                    y=df_bay_monthly["monthly_change"],
+                    marker_color=df_bay_monthly["color"],
+                    text=df_bay_monthly["label"],
+                    textposition="outside",
+                    name="Bay Area Monthly Job Change"
+                ))
+
+                fig_monthly.update_layout(
+                    title="Monthly Job Change in the Bay Area Since February 2020",
+                    xaxis_title="Month",
+                    yaxis_title="Job Change",
+                    showlegend=False,
+                    xaxis=dict(
+                        tickformat="%b\n%Y",
+                        dtick="M1",
+                        tickangle=0,
+                        tickfont=dict(size=10)
+                    ),
+                    yaxis=dict(tickfont=dict(size=12),
+                                range=[-80000, 80000]
+                                ),
+                )
+
+                st.plotly_chart(fig_monthly, use_container_width=True)
 
 
 elif section == "Population":
