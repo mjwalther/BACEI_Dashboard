@@ -508,8 +508,7 @@ if section == "Employment":
     def show_employment_chart(df):
         st.subheader("Employment Trend")
         fig = px.line(df, x="date", y="Employment", color="County", title="Employment Over Time")
-        st.plotly_chart(fig, use_container_width=True)
-
+        st.plotly_chart(fig, use_container_width=True
 
 
     # --- Main Dashboard Block ---
@@ -530,7 +529,7 @@ if section == "Employment":
             elif selected_tab == "Unemployment":
                 show_unemployment_rate_chart(processed_df)
             elif selected_tab == "Job Recovery":
-                st.subheader("Job Recovery from February 2020 to Now")
+                st.subheader("Job Recovery Since February 2020")
 
                 df_state = fetch_rest_of_ca_payroll_data()
                 df_bay = fetch_bay_area_payroll_data()
@@ -727,6 +726,8 @@ if section == "Employment":
                         xaxis=dict(
                             tickformat="%b\n%Y",
                             dtick="M1",
+                            title_font=dict(size=20),   # X-axis title
+                            tickfont=dict(size=10),     # X-axis tick labels
                             tickangle=0,
                             range=["2020-02-01", max_date.strftime("%Y-%m-%d")]
                         ),
@@ -734,10 +735,20 @@ if section == "Employment":
                             title_font=dict(size=20),
                             tickfont=dict(size=12)
                         ),
+                        # hovermode="x unified",
+                        # legend=dict(
+                        #     font=dict(size=14),
+                        #     title=None
+                        # )
                         hovermode="x unified",
                         legend=dict(
-                            font=dict(size=14),
-                            title=None
+                            font=dict(size=20),
+                            title=None,
+                            orientation="v",
+                            yanchor="top",
+                            y=1,
+                            xanchor="left",
+                            x=1
                         )
                     )
                     st.plotly_chart(fig_states, use_container_width=True)
