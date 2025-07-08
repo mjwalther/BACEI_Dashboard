@@ -69,21 +69,27 @@ state_code_map = {
     # "Virign Islands": "SMS78000000000000001"
 }
 
+bay_area_counties = [
+    "Alameda County", "Contra Costa County", "Marin County",
+    "Napa County", "San Francisco County", "San Mateo County",
+    "Santa Clara County", "Solano County", "Sonoma County"
+    ]
 
-# Title
+
+# --- Title ----
 st.set_page_config(page_title="Bay Area Dashboard", layout="wide")
 st.title("Bay Area Economic Dashboard")
 
+# --- BACEI Logo ---
+st.sidebar.image("BACEI Logo.png", use_container_width=True)
 
-# --- Sidebar Layout ---
-st.sidebar.header("Bay Area Dashboard Navigation")
-
-# Sidebar dropdown
+# --- Sidebar dropdown ---
 section = st.sidebar.selectbox(
     "Select Indicator:",
     ["Employment", "Population", "Housing", "Investment", "Transit"]
 )
 
+# --- Sidebar Subtabs ---
 subtab = None
 if section == "Employment":
     subtab = st.sidebar.radio(
@@ -92,18 +98,13 @@ if section == "Employment":
         key="employment_subtab"
     )
 
-# Main content - selecting an indicator
+# --- Main Content ---
 if section == "Employment":
-
-    bay_area_counties = [
-    "Alameda County", "Contra Costa County", "Marin County",
-    "Napa County", "San Francisco County", "San Mateo County",
-    "Santa Clara County", "Solano County", "Sonoma County"
-    ]
 
     # --- Data Fetching ---
 
     # Cache data with streamlit for 24 hours (data will be updated once a day)
+    # TO DO: Need a better method for having data be continuously called so as to not have loading time
     @st.cache_data(ttl=86400)        
     def fetch_unemployment_data():
         """
@@ -353,6 +354,7 @@ if section == "Employment":
 
             series = data["Results"]["series"][0]["data"]
             df = pd.DataFrame(series)
+            df = df[df["period"] != "M13"]
             df["date"] = pd.to_datetime(df["year"] + df["periodName"], format="%Y%B", errors="coerce")
             df["value"] = df["value"].astype(float) * 1000
             df = df[["date", "value"]].sort_values("date")
@@ -367,11 +369,12 @@ if section == "Employment":
             return None
 
 
-
     @st.cache_data(ttl=86400)
     def fetch_states_job_data(series_ids):
-        from math import ceil
-
+        """
+        Fetches monthly employment data from BLS API for a list of U.S. state series IDs,
+        and calculates percent change from February 2020 for each state.
+        """
         def chunk_list(lst, size):
             return [lst[i:i+size] for i in range(0, len(lst), size)]
 
@@ -379,6 +382,7 @@ if section == "Employment":
         all_dfs = []
         received_ids = set()
 
+        # Chunking API requests
         for chunk in chunks:
             payload = {
                 "seriesid": chunk,
@@ -408,6 +412,7 @@ if section == "Employment":
                     df["value"] = pd.to_numeric(df["value"], errors="coerce") * 1000
                     df = df[["date", "value"]].sort_values("date")
 
+                    # Calculate percent change from February 2020
                     baseline = df.loc[df["date"] == "2020-02-01", "value"]
                     if not baseline.empty:
                         df["pct_change"] = (df["value"] / baseline.iloc[0] - 1) * 100
@@ -423,7 +428,6 @@ if section == "Employment":
             st.warning(f"BLS API did not return data for {state_name}.")
 
         return pd.concat(all_dfs, ignore_index=True) if all_dfs else None
-
     
 
     # --- Data Processing ---
@@ -515,384 +519,304 @@ if section == "Employment":
             color = "County",
             title = "Unemployment Rate Over Time"
         )
+
+        fig.update_layout(
+            hovermode="x unified",
+            xaxis=dict(
+                title="Date",
+                tickformat="%b\n%Y",
+                dtick="M1",
+                tickangle=0,
+                title_font=dict(size=18),
+                tickfont=dict(size=10)
+            ),
+            yaxis=dict(
+                title="Unemployment Rate (%)",
+                title_font=dict(size=18),
+                tickfont=dict(size=12)
+            ),
+            title_font=dict(size=20)
+        )
+
+        for trace in fig.data:
+            trace.hovertemplate = f"{trace.name}: " + "%{y:.1f}%<extra></extra>"
+
         st.plotly_chart(fig, use_container_width=True)
 
     def show_employment_chart(df):
         st.subheader("Employment Trend")
-        fig = px.line(df, x="date", y="Employment", color="County", title="Employment Over Time")
+        fig = px.line(df,
+                      x="date",
+                      y="Employment",
+                      color="County",
+                      title="Employment Over Time")
+        
         st.plotly_chart(fig, use_container_width=True)
 
 
-    # --- Main Dashboard Block ---
+    def show_job_recovery_overall(df_state, df_bay, df_us):
+        st.subheader("Job Recovery Since February 2020")
+
+        if df_state is not None and df_bay is not None and df_us is not None:
+            # Find latest common month of data available for aesthetics
+            latest_common_date = min(df_state["date"].max(), df_bay["date"].max(), df_us["date"].max())
+            df_state = df_state[df_state["date"] <= latest_common_date]
+            df_bay = df_bay[df_bay["date"] <= latest_common_date]
+            df_us = df_us[df_us["date"] <= latest_common_date]
+
+            fig = go.Figure()
+
+            # U.S. (gray)
+            fig.add_trace(
+                go.Scatter(
+                    x=df_us["date"],
+                    y=df_us["pct_change"],
+                    mode="lines",
+                    name="United States",
+                    line=dict(color="#888888"),
+                    hovertemplate="United States: %{y:.2f}%<extra></extra>"
+                )
+            )
+
+            latest_us = df_us.iloc[-1]
+            fig.add_trace(
+                go.Scatter(
+                    x=[latest_us["date"]],
+                    y=[latest_us["pct_change"]],
+                    mode="markers+text",
+                    marker=dict(color="#888888", size=10),
+                    text=[f"{latest_us['pct_change']:.2f}%"],
+                    textposition="top center",
+                    name="United States",
+                    hoverinfo="skip",
+                    showlegend=False
+                )
+            )
+
+            # Rest of California (teal)
+            fig.add_trace(
+                go.Scatter(
+                    x=df_state["date"],
+                    y=df_state["pct_change"],
+                    mode="lines",
+                    name="Rest of California",
+                    line=dict(color="#00aca2"),
+                    hovertemplate="Rest of California: %{y:.2f}%<extra></extra>"
+                )
+            )
+
+            latest_row = df_state.iloc[-1]
+            fig.add_trace(
+                go.Scatter(
+                    x=[latest_row["date"]],
+                    y=[latest_row["pct_change"]],
+                    mode="markers+text",
+                    marker=dict(color="#00aca2", size=10),
+                    text=[f"{latest_row['pct_change']:.2f}%"],
+                    textposition="top center",
+                    name="California",
+                    hoverinfo="skip",
+                    showlegend=False
+                )
+            )
+
+            # Bay Area (dark blue)
+            fig.add_trace(
+                go.Scatter(
+                    x=df_bay["date"],
+                    y=df_bay["pct_change"],
+                    mode="lines",
+                    name="Bay Area",
+                    line=dict(color="#203864"),
+                    hovertemplate="Bay Area: %{y:.2f}%<extra></extra>"
+                )
+            )
+
+            latest_bay = df_bay.iloc[-1]
+            fig.add_trace(
+                go.Scatter(
+                    x=[latest_bay["date"]],
+                    y=[latest_bay["pct_change"]],
+                    mode="markers+text",
+                    marker=dict(color="#203864", size=10),
+                    text=[f"{latest_bay['pct_change']:.2f}%"],
+                    textposition="top center",
+                    name="Bay Area",
+                    hoverinfo="skip",
+                    showlegend=False
+                )
+            )
+
+            latest_date = max(df_state["date"].max(), df_bay["date"].max(), df_us["date"].max())
+            buffered_latest = latest_date + timedelta(days=30)
+            fig.update_layout(
+                title="Percent Change in Nonfarm Payroll Jobs Since Feb 2020",
+                xaxis_title="Date",
+                yaxis_title="% Change Since Feb 2020",
+                xaxis=dict(
+                    tickformat="%b\n%Y",
+                    dtick="M1",
+                    tickangle=0,
+                    title_font=dict(size=20),
+                    tickfont=dict(size=10),
+                    range=["2020-02-01", buffered_latest.strftime("%Y-%m-%d")]
+                ),
+                yaxis=dict(
+                    title_font=dict(size=20),
+                    tickfont=dict(size=12)
+                ),
+                hovermode="x unified",
+                legend=dict(
+                    font=dict(size=20),
+                    title=None,
+                    orientation="v",
+                    yanchor="top",
+                    y=1,
+                    xanchor="left",
+                    x=1
+                )
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
 
 
-    if section == "Employment":
-        st.header("Employment")
+    def show_job_recovery_by_state(state_code_map, fetch_states_job_data):
+        st.subheader("Job Recovery by State Since February 2020")
 
+        all_states = list(state_code_map.keys())
+        select_all_states = st.checkbox("Select All States", value=False)
 
-        raw_data = fetch_unemployment_data()
-        processed_df = process_unemployment_data(raw_data)
+        if select_all_states:
+            selected_states = st.multiselect(
+                "Choose states to compare:",
+                options=all_states,
+                default=all_states,
+                key="states_multiselect"
+            )
+        else:
+            selected_states = st.multiselect(
+                "Choose states to compare:",
+                options=all_states,
+                default=["California"],
+                key="states_multiselect"
+            )
 
-        df_state = fetch_rest_of_ca_payroll_data()
-        df_bay = fetch_bay_area_payroll_data()
-        df_us = fetch_us_payroll_data()
-  
+        state_series_ids = [state_code_map[state] for state in selected_states]
+        df_states = fetch_states_job_data(state_series_ids)
 
-        if processed_df is not None:
-            if subtab == "Employment":
-                show_employment_chart(processed_df)
-            elif subtab == "Unemployment":
-                show_unemployment_rate_chart(processed_df)
-            elif subtab == "Job Recovery":
-                st.subheader("Job Recovery Since February 2020")
+        if df_states is not None and not df_states.empty:
+            fig_states = px.line(
+                df_states,
+                x="date",
+                y="pct_change",
+                color="State",
+                title="Percent Change in Nonfarm Payroll Jobs Since Feb 2020 by State"
+            )
 
-                if df_state is not None and df_bay is not None and df_us is not None:
-                    # Find latest common month of data available for aesthetics
-                    latest_common_date = min(df_state["date"].max(), df_bay["date"].max(), df_us["date"].max())
-                    df_state = df_state[df_state["date"] <= latest_common_date]
-                    df_bay = df_bay[df_bay["date"] <= latest_common_date]
-                    df_us = df_us[df_us["date"] <= latest_common_date]
+            color_map = {trace.name: trace.line.color for trace in fig_states.data}
 
-
-                    fig = go.Figure()
-
-                    # U.S. (gray)
-                    fig.add_trace(
-                        go.Scatter(
-                            x=df_us["date"],
-                            y=df_us["pct_change"],
-                            mode="lines",
-                            name="United States",
-                            line=dict(color="#888888"),
-                            hovertemplate="% Change: %{y:.2f}<extra></extra>"
-                        )
-                    )
-
-                    latest_us = df_us.iloc[-1]
-                    fig.add_trace(
-                        go.Scatter(
-                            x=[latest_us["date"]],
-                            y=[latest_us["pct_change"]],
-                            mode="markers+text",
-                            marker=dict(color="#888888", size=10),
-                            text=[f"{latest_us['pct_change']:.2f}%"],
-                            textposition="top center",
-                            name="United States",
-                            hoverinfo="skip",
-                            showlegend=False
-                        )
-                    )
-
-                    # Rest of California (teal)
-                    fig.add_trace(
-                        go.Scatter(
-                            x=df_state["date"],
-                            y=df_state["pct_change"],
-                            mode="lines",
-                            name="Rest of California",
-                            line=dict(color="#00aca2"),
-                            hovertemplate="% Change: %{y:.2f}<extra></extra>"
-                        )
-                    )
-
-                    latest_row = df_state.iloc[-1]
-                    fig.add_trace(
+            for state in selected_states:
+                state_df = df_states[df_states["State"] == state].sort_values("date")
+                if not state_df.empty:
+                    latest_row = state_df.iloc[-1]
+                    fig_states.add_trace(
                         go.Scatter(
                             x=[latest_row["date"]],
                             y=[latest_row["pct_change"]],
                             mode="markers+text",
-                            marker=dict(color="#00aca2", size=10),
+                            marker=dict(size=10, color=color_map.get(state, "#000000")),
                             text=[f"{latest_row['pct_change']:.2f}%"],
                             textposition="top center",
-                            name="California",
+                            name=state,
                             hoverinfo="skip",
                             showlegend=False
                         )
-                    )
-
-                    # Bay Area (dark blue)
-                    fig.add_trace(
-                        go.Scatter(
-                            x=df_bay["date"],
-                            y=df_bay["pct_change"],
-                            mode="lines",
-                            name="Bay Area",
-                            line=dict(color="#203864"),
-                            hovertemplate="% Change: %{y:.2f}<extra></extra>"
-                        )
-                    )
-
-                    latest_bay = df_bay.iloc[-1]
-                    fig.add_trace(
-                        go.Scatter(
-                            x=[latest_bay["date"]],
-                            y=[latest_bay["pct_change"]],
-                            mode="markers+text",
-                            marker=dict(color="#203864", size=10),
-                            text=[f"{latest_bay['pct_change']:.2f}%"],
-                            textposition="top center",
-                            name="Bay Area",
-                            hoverinfo="skip",
-                            showlegend=False
-                        )
-                    )
-
-                    # Layout design
-                    latest_date = max(df_state["date"].max(), df_bay["date"].max(), df_us["date"].max())
-                    buffered_latest = latest_date + timedelta(days=30)
-                    fig.update_layout(
-                        title="Percent Change in Nonfarm Payroll Jobs Since Feb 2020",
-                        xaxis_title="Date",
-                        yaxis_title="% Change Since Feb 2020",
-                        xaxis=dict(
-                            tickformat="%b\n%Y",        # Format as "Jan\n2024"
-                            dtick="M1",                 # One tick per month
-                            tickangle=0,                # Keep labels horizontal (adjust for a slant)
-                            title_font=dict(size=20),   # X-axis title
-                            tickfont=dict(size=10),     # X-axis tick labels
-                            range=["2020-02-01", buffered_latest.strftime("%Y-%m-%d")]
-                        ),
-                        yaxis=dict(
-                            title_font=dict(size=20),   # Y-axis title
-                            tickfont=dict(size=12)      # Y-axis tick labels
-                        ),
-                        hovermode="x unified",
-                        legend=dict(
-                            font=dict(size=20),
-                            title=None,
-                            orientation="v",
-                            yanchor="top",
-                            y=1,
-                            xanchor="left",
-                            x=1
-                        )
-                    )
-
-                    st.plotly_chart(fig, use_container_width=True)
-
-
-                # US States Job Recovery Chart
-                st.subheader("Job Recovery by State Since February 2020")
-                
-                all_states = list(state_code_map.keys())
-                select_all_states = st.checkbox("Select All States", value=False)
-
-                if select_all_states:
-                    selected_states = st.multiselect(
-                        "Choose states to compare:",
-                        options=all_states,
-                        default=all_states,
-                        key="states_multiselect"
                     )
                 else:
-                    selected_states = st.multiselect(
-                        "Choose states to compare:",
-                        options=all_states,
-                        default=["California"],  # Default starting state
-                        key="states_multiselect"
-                    )
+                    st.warning(f"No data available for {state}.")
 
-                state_series_ids = [state_code_map[state] for state in selected_states]
-                df_states = fetch_states_job_data(state_series_ids)
+            max_date = df_states["date"].max() + timedelta(days=25)
+            hover_mode = "x unified" if len(selected_states) <= 10 else "closest"
 
+            fig_states.update_layout(
+                xaxis_title="Date",
+                yaxis_title="% Change Since Feb 2020",
+                xaxis=dict(
+                    tickformat="%b\n%Y",
+                    dtick="M1",
+                    title_font=dict(size=20),
+                    tickfont=dict(size=10),
+                    tickangle=0,
+                    range=["2020-02-01", max_date.strftime("%Y-%m-%d")]
+                ),
+                yaxis=dict(
+                    title_font=dict(size=20),
+                    tickfont=dict(size=12)
+                ),
+                hovermode=hover_mode,
+                legend=dict(
+                    font=dict(size=20),
+                    title=None,
+                    orientation="v",
+                    yanchor="top",
+                    y=1,
+                    xanchor="left",
+                    x=1
+                )
+            )
 
-                if df_states is not None and not df_states.empty:
-                    fig_states = px.line(
-                        df_states,
-                        x="date",
-                        y="pct_change",
-                        color="State",
-                        title="Percent Change in Nonfarm Payroll Jobs Since Feb 2020 by State"
-                    )
+            for trace in fig_states.data:
+                if "lines" in trace.mode:
+                    trace.hovertemplate = trace.name + ": %{y:.2f}%<extra></extra>"
+                else:
+                    trace.hovertemplate = ""
 
-
-                    # Extract color mapping from base figure
-                    color_map = {trace.name: trace.line.color for trace in fig_states.data}
-
-                    # Add markers for latest data points, with matching color
-                    for state in selected_states:
-                        state_df = df_states[df_states["State"] == state].sort_values("date")
-                        if not state_df.empty:
-                            latest_row = state_df.iloc[-1]
-                            fig_states.add_trace(
-                                go.Scatter(
-                                    x=[latest_row["date"]],
-                                    y=[latest_row["pct_change"]],
-                                    mode="markers+text",
-                                    marker=dict(size=10, color=color_map.get(state, "#000000")),
-                                    text=[f"{latest_row['pct_change']:.2f}%"],
-                                    textposition="top center",
-                                    name=state,
-                                    hoverinfo="skip",
-                                    showlegend=False
-                                )
-                            )
-                        else:
-                            st.warning(f"No data available for {state}.")
-
-                    # Extend x-axis just a bit
-                    max_date = df_states["date"].max() + timedelta(days=25)
-                    
-                    # Dynamically adjust hovermode based on number of selected states
-                    hover_mode = "x unified" if len(selected_states) <= 10 else "closest"
-
-                    fig_states.update_layout(
-                        xaxis_title="Date",
-                        yaxis_title="% Change Since Feb 2020",
-                        xaxis=dict(
-                            tickformat="%b\n%Y",
-                            dtick="M1",
-                            title_font=dict(size=20),   # X-axis title
-                            tickfont=dict(size=10),     # X-axis tick labels
-                            tickangle=0,
-                            range=["2020-02-01", max_date.strftime("%Y-%m-%d")]
-                        ),
-                        yaxis=dict(
-                            title_font=dict(size=20),
-                            tickfont=dict(size=12)
-                        ),
-                        hovermode=hover_mode,
-                        legend=dict(
-                            font=dict(size=20),
-                            title=None,
-                            orientation="v",
-                            yanchor="top",
-                            y=1,
-                            xanchor="left",
-                            x=1
-                        )
-                    )
-
-                    # Customize hover template only for the main lines
-                    for trace in fig_states.data:
-                        if "lines" in trace.mode:
-                            trace.hovertemplate = "% Change: %{y:.2f}<extra></extra>"
-                        else:
-                            trace.hovertemplate = ""  # hide hover for marker-only traces
+            st.plotly_chart(fig_states, use_container_width=True)
 
 
-                    # Adjust hovermode based on number of selected states
-                    if len(selected_states) > 10:
-                        fig_states.update_layout(hovermode="closest")
-                    else:
-                        fig_states.update_layout(hovermode="x unified")
+    def show_sf_monthly_job_change():
+        st.subheader("Monthly Job Change in SF/San Mateo Subregion")
 
-                    # Adjust hovertemplate per trace
-                    for trace in fig_states.data:
-                        if len(selected_states) > 10:
-                            trace.hovertemplate = trace.name + "<br>% Change: %{y:.2f}%<extra></extra>"
-                        else:
-                            trace.hovertemplate = "% Change: %{y:.2f}%<extra></extra>"
+        series_id = "SMS06418840000000001"
+        payload = {
+            "seriesid": [series_id],
+            "startyear": "2020",
+            "endyear": str(datetime.now().year),
+            "registrationKey": BLS_API_KEY
+        }
 
-                    st.plotly_chart(fig_states, use_container_width=True)
+        try:
+            response = requests.post("https://api.bls.gov/publicAPI/v2/timeseries/data/", json=payload, timeout=30)
+            data = response.json()
 
-            elif subtab == "Monthly Job Change":
-                # --- Monthly Job Change in the SF/San Mateo Subregion ---
-                st.subheader("Monthly Job Change in SF/San Mateo Subregion")
-
-                # --- Fetch data from BLS for SF/San Mateo MD ---
-                series_id = "SMS06418840000000001"
-                payload = {
-                    "seriesid": [series_id],
-                    "startyear": "2020",
-                    "endyear": str(datetime.now().year),
-                    "registrationKey": BLS_API_KEY
-                }
-
-                try:
-                    response = requests.post("https://api.bls.gov/publicAPI/v2/timeseries/data/", json=payload, timeout=30)
-                    data = response.json()
-
-                    if "Results" in data and data["Results"]["series"]:
-                        series = data["Results"]["series"][0]["data"]
-                        df = pd.DataFrame(series)
-                        df = df[df["period"] != "M13"]  # Remove annual averages
-                        df["date"] = pd.to_datetime(df["year"] + df["periodName"], format="%Y%B", errors="coerce")
-                        df["value"] = pd.to_numeric(df["value"], errors="coerce") * 1000
-                        df = df.sort_values("date")
-
-                        # Filter for Feb 2020 onward
-                        df = df[df["date"] >= "2020-02-01"]
-
-                        # Compute monthly job change
-                        df["monthly_change"] = df["value"].diff()
-                        
-                        # Drop rows with NaN in monthly_change (Just the first row - Feb 2020)
-                        df = df.dropna(subset=["monthly_change"])
-
-                        df["label"] = df["monthly_change"].apply(
-                            lambda x: f"{int(x/1000)}K" if abs(x) >= 1000 else f"{int(x)}"
-                        )
-                        df["color"] = df["monthly_change"].apply(lambda x: "#00aca2" if x >= 0 else "#e63946")
-
-                        fig = go.Figure()
-                        fig.add_trace(go.Bar(
-                            x=df["date"],
-                            y=df["monthly_change"],
-                            marker_color=df["color"],
-                            text=df["label"],
-                            textposition="outside",
-                            name="SF/San Mateo MD",
-                            hovertemplate="%{x|%B %Y}<br>Change: %{y:,.0f} Jobs<extra></extra>"
-                        ))
-
-                        fig.update_layout(
-                            title="Monthly Job Change in SF/San Mateo Metropolitan Division Subregion Since February 2020",
-                            xaxis_title="Month",
-                            yaxis_title="Job Change",
-                            showlegend=False,
-                            xaxis=dict(
-                                tickformat="%b\n%Y",
-                                dtick="M1",
-                                tickangle=0,
-                                title_font=dict(size=20),
-                                tickfont=dict(size=10)
-                            ),
-                            yaxis=dict(tickfont=dict(size=12),
-                                       range=[-20000, 25000]),
-                            margin=dict(t=50, b=50),
-                        )
-
-                        st.plotly_chart(fig, use_container_width=True)
-                    else:
-                        st.warning("No data returned from BLS for SF/San Mateo MD.")
-                except Exception as e:
-                    st.error(f"Failed to fetch or render chart: {e}")            
-
-
-                # --- Monthly Job Change in the Bay Area ---
-                st.subheader("Monthly Job Change in the Bay Area")
-
-                # Use existing Bay Area data from fetch_bay_area_payroll_data
-                df_bay_monthly = df_bay.copy()
-                df_bay_monthly = df_bay_monthly.sort_values("date")
-
-                # Compute monthly change (difference from previous month)
-                df_bay_monthly["monthly_change"] = df_bay_monthly["value"].diff()
-
-                # Drop February 2020 row so March becomes the first point (March shows change from Feb)
-                df_bay_monthly = df_bay_monthly[df_bay_monthly["date"] >= pd.to_datetime("2020-03-01")]
-                df_bay_monthly["label"] = df_bay_monthly["monthly_change"].apply(
+            if "Results" in data and data["Results"]["series"]:
+                series = data["Results"]["series"][0]["data"]
+                df = pd.DataFrame(series)
+                df = df[df["period"] != "M13"]
+                df["date"] = pd.to_datetime(df["year"] + df["periodName"], format="%Y%B", errors="coerce")
+                df["value"] = pd.to_numeric(df["value"], errors="coerce") * 1000
+                df = df.sort_values("date")
+                df = df[df["date"] >= "2020-02-01"]
+                df["monthly_change"] = df["value"].diff()
+                df = df.dropna(subset=["monthly_change"])
+                df["label"] = df["monthly_change"].apply(
                     lambda x: f"{int(x/1000)}K" if abs(x) >= 1000 else f"{int(x)}"
                 )
-                df_bay_monthly["color"] = df_bay_monthly["monthly_change"].apply(
-                    lambda x: "#00aca2" if x >= 0 else "#e63946"
-                )
+                df["color"] = df["monthly_change"].apply(lambda x: "#00aca2" if x >= 0 else "#e63946")
 
-                # Bar chart with custom labels
-                fig_monthly = go.Figure()
-                fig_monthly.add_trace(go.Bar(
-                    x=df_bay_monthly["date"],
-                    y=df_bay_monthly["monthly_change"],
-                    marker_color=df_bay_monthly["color"],
-                    text=df_bay_monthly["label"],
+                fig = go.Figure()
+                fig.add_trace(go.Bar(
+                    x=df["date"],
+                    y=df["monthly_change"],
+                    marker_color=df["color"],
+                    text=df["label"],
                     textposition="outside",
-                    name="Bay Area Monthly Job Change",
+                    name="SF/San Mateo MD",
                     hovertemplate="%{x|%B %Y}<br>Change: %{y:,.0f} Jobs<extra></extra>"
                 ))
 
-                fig_monthly.update_layout(
-                    title="Monthly Job Change in the Bay Area Since February 2020",
+                fig.update_layout(
+                    title="Monthly Job Change Since February 2020",
                     xaxis_title="Month",
                     yaxis_title="Job Change",
                     showlegend=False,
@@ -904,28 +828,108 @@ if section == "Employment":
                         tickfont=dict(size=10)
                     ),
                     yaxis=dict(tickfont=dict(size=12),
-                                range=[-80000, 80000]
-                                ),
+                            range=[-20000, 25000]),
+                    margin=dict(t=50, b=50),
                 )
 
-                st.plotly_chart(fig_monthly, use_container_width=True)
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.warning("No data returned from BLS for SF/San Mateo MD.")
+        except Exception as e:
+            st.error(f"Failed to fetch or render chart: {e}")
 
 
-elif section == "Population":
-    st.header("Population")
-    st.write("Placeholder: population graphs, charts, and tables.")
+    def show_bay_area_monthly_job_change(df_bay):
+        st.subheader("Monthly Job Change in the Bay Area")
 
-elif section == "Housing":
-    st.header("Housing")
-    st.write("Placeholder: housing graphs, charts, and tables.")
+        df_bay_monthly = df_bay.copy().sort_values("date")
+        df_bay_monthly["monthly_change"] = df_bay_monthly["value"].diff()
+        df_bay_monthly = df_bay_monthly[df_bay_monthly["date"] >= pd.to_datetime("2020-03-01")]
 
-elif section == "Investment":
-    st.header("Investment")
-    st.write("Placeholder: investment graphs, charts, and tables.")
+        df_bay_monthly["label"] = df_bay_monthly["monthly_change"].apply(
+            lambda x: f"{int(x/1000)}K" if abs(x) >= 1000 else f"{int(x)}"
+        )
+        df_bay_monthly["color"] = df_bay_monthly["monthly_change"].apply(
+            lambda x: "#00aca2" if x >= 0 else "#e63946"
+        )
 
-elif section == "Transit":
-    st.header("Transit")
-    st.write("Placeholder: transit graphs, charts, and tables.")
+        fig_monthly = go.Figure()
+        fig_monthly.add_trace(go.Bar(
+            x=df_bay_monthly["date"],
+            y=df_bay_monthly["monthly_change"],
+            marker_color=df_bay_monthly["color"],
+            text=df_bay_monthly["label"],
+            textposition="outside",
+            name="Bay Area Monthly Job Change",
+            hovertemplate="%{x|%B %Y}<br>Change: %{y:,.0f} Jobs<extra></extra>"
+        ))
+
+        fig_monthly.update_layout(
+            title="Monthly Job Change Since February 2020",
+            xaxis_title="Month",
+            yaxis_title="Job Change",
+            showlegend=False,
+            xaxis=dict(
+                tickformat="%b\n%Y",
+                dtick="M1",
+                tickangle=0,
+                title_font=dict(size=20),
+                tickfont=dict(size=10)
+            ),
+            yaxis=dict(tickfont=dict(size=12), range=[-80000, 80000]),
+        )
+
+        st.plotly_chart(fig_monthly, use_container_width=True)
+
+
+    # --- Main Dashboard Block ---
+
+    if section == "Employment":
+        st.header("Employment")
+
+        # Process employment / unemployment data
+        raw_data = fetch_unemployment_data()
+        processed_df = process_unemployment_data(raw_data)
+
+        # Employment data for states, Bay Area, and the United States
+        df_state = fetch_rest_of_ca_payroll_data()
+        df_bay = fetch_bay_area_payroll_data()
+        df_us = fetch_us_payroll_data()
+
+
+        if processed_df is not None:
+            if subtab == "Employment":
+                show_employment_chart(processed_df)
+
+            elif subtab == "Unemployment":
+                show_unemployment_rate_chart(processed_df)
+
+            elif subtab == "Job Recovery":
+                show_job_recovery_overall(df_state, df_bay, df_us)
+                show_job_recovery_by_state(state_code_map, fetch_states_job_data)
+
+            elif subtab == "Monthly Job Change":
+                show_sf_monthly_job_change()
+                show_bay_area_monthly_job_change(df_bay)
+
+
+
+    elif section == "Population":
+        st.header("Population")
+        st.write("Placeholder: population graphs, charts, and tables.")
+
+    elif section == "Housing":
+        st.header("Housing")
+        st.write("Placeholder: housing graphs, charts, and tables.")
+
+    elif section == "Investment":
+        st.header("Investment")
+        st.write("Placeholder: investment graphs, charts, and tables.")
+
+    elif section == "Transit":
+        st.header("Transit")
+        st.write("Placeholder: transit graphs, charts, and tables.")
+
 
 st.markdown("---")
-st.caption("Created by Matthias Jiro Walther")
+st.caption("Created by Matthias Jiro Walther for the Bay Area Council Economic Institute")
