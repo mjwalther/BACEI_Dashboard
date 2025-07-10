@@ -520,10 +520,13 @@ if section == "Employment":
             title = "Unemployment Rate Over Time"
         )
 
+        quarterly_ticks = filtered_df["date"][filtered_df["date"].dt.month.isin([1, 4, 7, 10])].dt.strftime("%Y-%m-01").unique().tolist()
+
         fig.update_layout(
             hovermode="x unified",
             xaxis=dict(
                 title="Date",
+                tickvals=quarterly_ticks,
                 tickformat="%b\n%Y",
                 dtick="M1",
                 tickangle=0,
@@ -649,11 +652,17 @@ if section == "Employment":
 
             latest_date = max(df_state["date"].max(), df_bay["date"].max(), df_us["date"].max())
             buffered_latest = latest_date + timedelta(days=30)
+
+            # Generate quarterly ticks (Jan, Apr, Jul, Oct) across all dates
+            all_dates = pd.concat([df_state["date"], df_bay["date"], df_us["date"]])
+            quarterly_ticks = sorted(all_dates[all_dates.dt.month.isin([1, 4, 7, 10])].unique())
+
             fig.update_layout(
                 title="Percent Change in Nonfarm Payroll Jobs Since Feb 2020",
                 xaxis_title="Date",
                 yaxis_title="% Change Since Feb 2020",
                 xaxis=dict(
+                    tickvals=quarterly_ticks,
                     tickformat="%b\n%Y",
                     dtick="M1",
                     tickangle=0,
@@ -737,12 +746,15 @@ if section == "Employment":
 
             max_date = df_states["date"].max() + timedelta(days=25)
             hover_mode = "x unified" if len(selected_states) <= 10 else "closest"
+            all_dates = df_states["date"]
+            quarterly_ticks = sorted(all_dates[all_dates.dt.month.isin([1, 4, 7, 10])].unique())
 
             fig_states.update_layout(
                 xaxis_title="Date",
                 yaxis_title="% Change Since Feb 2020",
                 xaxis=dict(
                     tickformat="%b\n%Y",
+                    tickvals=quarterly_ticks,
                     dtick="M1",
                     title_font=dict(size=20),
                     tickfont=dict(size=10),
@@ -909,9 +921,15 @@ if section == "Employment":
                 show_job_recovery_by_state(state_code_map, fetch_states_job_data)
 
             elif subtab == "Monthly Job Change":
-                show_sf_monthly_job_change()
-                show_bay_area_monthly_job_change(df_bay)
+                region_choice = st.selectbox(
+                    "Select Region:",
+                    options=["Greater Bay Area", "SF/San Mateo Subregion"]
+                )
 
+                if region_choice == "SF/San Mateo Subregion":
+                    show_sf_monthly_job_change()
+                elif region_choice == "Greater Bay Area":
+                    show_bay_area_monthly_job_change(df_bay)
 
 
     elif section == "Population":
