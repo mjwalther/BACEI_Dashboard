@@ -6,197 +6,12 @@ import plotly.express as px
 import plotly.graph_objects as go
 import os
 from datetime import datetime, timedelta
+from data_mappings import state_code_map, series_mapping, bay_area_counties
 from dotenv import load_dotenv
 load_dotenv()
 
 # BLS_API_KEY = os.getenv("BLS_API_KEY")
 BLS_API_KEY= "15060bc07890456a95aa5d0076966247"
-
-# Mapping of U.S. states to BLS nonfarm payroll series IDs (seasonally adjusted)
-state_code_map = {
-    "Alabama": "SMS01000000000000001",
-    "Alaska": "SMS02000000000000001",
-    "Arizona": "SMS04000000000000001",
-    "Arkansas": "SMS05000000000000001",
-    "California": "SMS06000000000000001",
-    "Colorado": "SMS08000000000000001",
-    "Connecticut": "SMS09000000000000001",
-    "Delaware": "SMS10000000000000001",
-    "District of Columbia": "SMS11000000000000001",
-    "Florida": "SMS12000000000000001",
-    "Georgia": "SMS13000000000000001",
-    "Hawaii": "SMS15000000000000001",
-    "Idaho": "SMS16000000000000001",
-    "Illinois": "SMS17000000000000001",
-    "Indiana": "SMS18000000000000001",
-    "Iowa": "SMS19000000000000001",
-    "Kansas": "SMS20000000000000001",
-    "Kentucky": "SMS21000000000000001",
-    "Louisiana": "SMS22000000000000001",
-    "Maine": "SMS23000000000000001",
-    "Maryland": "SMS24000000000000001",
-    "Massachusetts": "SMS25000000000000001",
-    "Michigan": "SMS26000000000000001",
-    "Minnesota": "SMS27000000000000001",
-    "Mississippi": "SMS28000000000000001",
-    "Missouri": "SMS29000000000000001",
-    "Montana": "SMS30000000000000001",
-    "Nebraska": "SMS31000000000000001",
-    "Nevada": "SMS32000000000000001",
-    "New Hampshire": "SMS33000000000000001",
-    "New Jersey": "SMS34000000000000001",
-    "New Mexico": "SMS35000000000000001",
-    "New York": "SMS36000000000000001",
-    "North Carolina": "SMS37000000000000001",
-    "North Dakota": "SMS38000000000000001",
-    "Ohio": "SMS39000000000000001",
-    "Oklahoma": "SMS40000000000000001",
-    "Oregon": "SMS41000000000000001",
-    "Pennsylvania": "SMS42000000000000001",
-    "Rhode Island": "SMS44000000000000001",
-    "South Carolina": "SMS45000000000000001",
-    "South Dakota": "SMS46000000000000001",
-    "Tennessee": "SMS47000000000000001",
-    "Texas": "SMS48000000000000001",
-    "Utah": "SMS49000000000000001",
-    "Vermont": "SMS50000000000000001",
-    "Virginia": "SMS51000000000000001",
-    "Washington": "SMS53000000000000001",
-    "West Virginia": "SMS54000000000000001",
-    "Wisconsin": "SMS55000000000000001",
-    "Wyoming": "SMS56000000000000001"
-    # "Puerto Rico": "SMS72000000000000001",
-    # "Virign Islands": "SMS78000000000000001"
-}
-
-bay_area_counties = [
-    "Alameda County", "Contra Costa County", "Marin County",
-    "Napa County", "San Francisco County", "San Mateo County",
-    "Santa Clara County", "Solano County", "Sonoma County"
-]
-
-# Mapping for jobs by industry and by region
-series_mapping = {
-    'SMU06360842000000001': ('Oakland-Fremont-Berkeley, CA', 'Construction'),
-    'SMU06418842000000001': ('San Francisco-San Mateo-Redwood City, CA', 'Construction'),
-    'SMU06419402000000001': ('San Jose-Sunnyvale-Santa Clara, CA', 'Construction'),
-    'SMU06420342000000001': ('San Rafael, CA', 'Construction'),
-    'SMU06422202000000001': ('Santa Rosa-Petaluma, CA', 'Construction'),
-    'SMU06467002000000001': ('Vallejo, CA', 'Construction'),
-    'SMU06349003000000001': ('Napa, CA', 'Manufacturing'),
-    'SMU06360843000000001': ('Oakland-Fremont-Berkeley, CA', 'Manufacturing'),
-    'SMU06418843000000001': ('San Francisco-San Mateo-Redwood City, CA', 'Manufacturing'),
-    'SMU06419403000000001': ('San Jose-Sunnyvale-Santa Clara, CA', 'Manufacturing'),
-    'SMU06420343000000001': ('San Rafael, CA', 'Manufacturing'),
-    'SMU06422203000000001': ('Santa Rosa-Petaluma, CA', 'Manufacturing'),
-    'SMU06467003000000001': ('Vallejo, CA', 'Manufacturing'),
-    # 'SMU06349004100000001': ('Napa, CA', 'Wholesale Trade'),
-    # 'SMU06360844100000001': ('Oakland-Fremont-Berkeley, CA', 'Wholesale Trade'),
-    # 'SMU06418844100000001': ('San Francisco-San Mateo-Redwood City, CA', 'Wholesale Trade'),
-    # 'SMU06419404100000001': ('San Jose-Sunnyvale-Santa Clara, CA', 'Wholesale Trade'),
-    # 'SMU06420344100000001': ('San Rafael, CA', 'Wholesale Trade'),
-    # 'SMU06422204100000001': ('Santa Rosa-Petaluma, CA', 'Wholesale Trade'),
-    # 'SMU06467004100000001': ('Vallejo, CA', 'Wholesale Trade'),
-    'SMU06349004200000001': ('Napa, CA', 'Retail Trade'),
-    'SMU06360844200000001': ('Oakland-Fremont-Berkeley, CA', 'Retail Trade'),
-    'SMU06418844200000001': ('San Francisco-San Mateo-Redwood City, CA', 'Retail Trade'),
-    'SMU06419404200000001': ('San Jose-Sunnyvale-Santa Clara, CA', 'Retail Trade'),
-    'SMU06420344200000001': ('San Rafael, CA', 'Retail Trade'),
-    'SMU06422204200000001': ('Santa Rosa-Petaluma, CA', 'Retail Trade'),
-    'SMU06467004200000001': ('Vallejo, CA', 'Retail Trade'),
-    # 'SMU06360844340008901': ('Oakland-Fremont-Berkeley, CA', 'Transportation and Warehousing'),
-    # 'SMU06418844340008901': ('San Francisco-San Mateo-Redwood City, CA', 'Transportation and Warehousing'),
-    # 'SMU06419404340008901': ('San Jose-Sunnyvale-Santa Clara, CA', 'Transportation and Warehousing'),
-    'SMU06349005000000001': ('Napa, CA', 'Information'),
-    'SMU06360845000000001': ('Oakland-Fremont-Berkeley, CA', 'Information'),
-    'SMU06418845000000001': ('San Francisco-San Mateo-Redwood City, CA', 'Information'),
-    'SMU06419405000000001': ('San Jose-Sunnyvale-Santa Clara, CA', 'Information'),
-    'SMU06420345000000001': ('San Rafael, CA', 'Information'),
-    'SMU06422205000000001': ('Santa Rosa-Petaluma, CA', 'Information'),
-    'SMU06467005000000001': ('Vallejo, CA', 'Information'),
-    # 'SMU06360845552000001': ('Oakland-Fremont-Berkeley, CA', 'Finance and Insurance'),
-    # 'SMU06418845552000001': ('San Francisco-San Mateo-Redwood City, CA', 'Finance and Insurance'),
-    # 'SMU06419405552000001': ('San Jose-Sunnyvale-Santa Clara, CA', 'Finance and Insurance'),
-    # 'SMU06422205552000001': ('Santa Rosa-Petaluma, CA', 'Finance and Insurance'),
-    # 'SMU06467005552000001': ('Vallejo, CA', 'Finance and Insurance'),
-    # 'SMU06360845553000001': ('Oakland-Fremont-Berkeley, CA', 'Real Estate and Rental and Leasing'),
-    # 'SMU06418845553000001': ('San Francisco-San Mateo-Redwood City, CA', 'Real Estate and Rental and Leasing'),
-    # 'SMU06419405553000001': ('San Jose-Sunnyvale-Santa Clara, CA', 'Real Estate and Rental and Leasing'),
-    'SMU06349006000000001': ('Napa, CA', 'Professional and Business Services'),
-    'SMU06360846000000001': ('Oakland-Fremont-Berkeley, CA', 'Professional and Business Services'),
-    'SMU06418846000000001': ('San Francisco-San Mateo-Redwood City, CA', 'Professional and Business Services'),
-    'SMU06419406000000001': ('San Jose-Sunnyvale-Santa Clara, CA', 'Professional and Business Services'),
-    'SMU06420346000000001': ('San Rafael, CA', 'Professional and Business Services'),
-    'SMU06422206000000001': ('Santa Rosa-Petaluma, CA', 'Professional and Business Services'),
-    'SMU06467006000000001': ('Vallejo, CA', 'Professional and Business Services'),
-    # 'SMU06360846054000001': ('Oakland-Fremont-Berkeley, CA', 'Professional, Scientific, and Technical Services'),
-    # 'SMU06418846054000001': ('San Francisco-San Mateo-Redwood City, CA', 'Professional, Scientific, and Technical Services'),
-    # 'SMU06419406054000001': ('San Jose-Sunnyvale-Santa Clara, CA', 'Professional, Scientific, and Technical Services'),
-    # 'SMU06422206054000001': ('Santa Rosa-Petaluma, CA', 'Professional, Scientific, and Technical Services'),
-    # 'SMU06360846055000001': ('Oakland-Fremont-Berkeley, CA', 'Management of Companies and Enterprises'),
-    # 'SMU06418846055000001': ('San Francisco-San Mateo-Redwood City, CA', 'Management of Companies and Enterprises'),
-    # 'SMU06419406055000001': ('San Jose-Sunnyvale-Santa Clara, CA', 'Management of Companies and Enterprises'),
-    # 'SMU06422206055000001': ('Santa Rosa-Petaluma, CA', 'Management of Companies and Enterprises'),
-    # 'SMU06349006056000001': ('Napa, CA', 'Administrative and Support and Waste Management and Remediation Services'),
-    # 'SMU06360846056000001': ('Oakland-Fremont-Berkeley, CA', 'Administrative and Support and Waste Management and Remediation Services'),
-    # 'SMU06418846056000001': ('San Francisco-San Mateo-Redwood City, CA', 'Administrative and Support and Waste Management and Remediation Services'),
-    # 'SMU06419406056000001': ('San Jose-Sunnyvale-Santa Clara, CA', 'Administrative and Support and Waste Management and Remediation Services'),
-    # 'SMU06422206056000001': ('Santa Rosa-Petaluma, CA', 'Administrative and Support and Waste Management and Remediation Services'),
-    # 'SMU06467006056000001': ('Vallejo, CA', 'Administrative and Support and Waste Management and Remediation Services'),
-    # 'SMU06360846561000001': ('Oakland-Fremont-Berkeley, CA', 'Private Educational Services'),
-    # 'SMU06418846561000001': ('San Francisco-San Mateo-Redwood City, CA', 'Private Educational Services'),
-    # 'SMU06419406561000001': ('San Jose-Sunnyvale-Santa Clara, CA', 'Private Educational Services'),
-    # 'SMU06349006562000001': ('Napa, CA', 'Health Care and Social Assistance'),
-    # 'SMU06360846562000001': ('Oakland-Fremont-Berkeley, CA', 'Health Care and Social Assistance'),
-    # 'SMU06418846562000001': ('San Francisco-San Mateo-Redwood City, CA', 'Health Care and Social Assistance'),
-    # 'SMU06419406562000001': ('San Jose-Sunnyvale-Santa Clara, CA', 'Health Care and Social Assistance'),
-    # 'SMU06422206562000001': ('Santa Rosa-Petaluma, CA', 'Health Care and Social Assistance'),
-    # 'SMU06467006562000001': ('Vallejo, CA', 'Health Care and Social Assistance'),
-    # 'SMU06360847071000001': ('Oakland-Fremont-Berkeley, CA', 'Arts, Entertainment, and Recreation'),
-    # 'SMU06418847071000001': ('San Francisco-San Mateo-Redwood City, CA', 'Arts, Entertainment, and Recreation'),
-    # 'SMU06349007072000001': ('Napa, CA', 'Accommodation and Food Services'),
-    # 'SMU06360847072000001': ('Oakland-Fremont-Berkeley, CA', 'Accommodation and Food Services'),
-    # 'SMU06418847072000001': ('San Francisco-San Mateo-Redwood City, CA', 'Accommodation and Food Services'),
-    # 'SMU06419407072000001': ('San Jose-Sunnyvale-Santa Clara, CA', 'Accommodation and Food Services'),
-    # 'SMU06422207072000001': ('Santa Rosa-Petaluma, CA', 'Accommodation and Food Services'),
-    # 'SMU06467007072000001': ('Vallejo, CA', 'Accommodation and Food Services'),
-    'SMU06349009000000001': ('Napa, CA', 'Government'),
-    'SMU06360849000000001': ('Oakland-Fremont-Berkeley, CA', 'Government'),
-    'SMU06418849000000001': ('San Francisco-San Mateo-Redwood City, CA', 'Government'),
-    'SMU06419409000000001': ('San Jose-Sunnyvale-Santa Clara, CA', 'Government'),
-    'SMU06420349000000001': ('San Rafael, CA', 'Government'),
-    'SMU06422209000000001': ('Santa Rosa-Petaluma, CA', 'Government'),
-    'SMU06467009000000001': ('Vallejo, CA', 'Government'),
-    'SMU06349007000000001': ('Napa, CA', 'Leisure and Hospitality'),
-    'SMU06360847000000001': ('Oakland-Fremont-Berkeley, CA', 'Leisure and Hospitality'),
-    'SMU06418847000000001': ('San Francisco-San Mateo-Redwood City, CA', 'Leisure and Hospitality'),
-    'SMU06419407000000001': ('San Jose-Sunnyvale-Santa Clara, CA', 'Leisure and Hospitality'),
-    'SMU06420347000000001': ('San Rafael, CA', 'Leisure and Hospitality'),
-    'SMU06422207000000001': ('Santa Rosa-Petaluma, CA', 'Leisure and Hospitality'),
-    'SMU06467007000000001': ('Vallejo, CA', 'Leisure and Hospitality'),
-    'SMU06349005500000001': ('Napa, CA', 'Financial Activities'),
-    'SMU06360845500000001': ('Oakland-Fremont-Berkeley, CA', 'Financial Activities'),
-    'SMU06418845500000001': ('San Francisco-San Mateo-Redwood City, CA', 'Financial Activities'),
-    'SMU06419405500000001': ('San Jose-Sunnyvale-Santa Clara, CA', 'Financial Activities'),
-    'SMU06420345500000001': ('San Rafael, CA', 'Financial Activities'),
-    'SMU06422205500000001': ('Santa Rosa-Petaluma, CA', 'Financial Activities'),
-    'SMU06467005500000001': ('Vallejo, CA', 'Financial Activities'),
-    'SMU06349006500000001': ('Napa, CA', 'Education and Health Services'),
-    'SMU06360846500000001': ('Oakland-Fremont-Berkeley, CA', 'Education and Health Services'),
-    'SMU06418846500000001': ('San Francisco-San Mateo-Redwood City, CA', 'Education and Health Services'),
-    'SMU06419406500000001': ('San Jose-Sunnyvale-Santa Clara, CA', 'Education and Health Services'),
-    'SMU06420346500000001': ('San Rafael, CA', 'Education and Health Services'),
-    'SMU06422206500000001': ('Santa Rosa-Petaluma, CA', 'Education and Health Services'),
-    'SMU06467006500000001': ('Vallejo, CA', 'Education and Health Services'),
-    'SMU06349004000000001': ('Napa, CA', 'Trade, Transportation, and Utilities'),
-    'SMU06360844000000001': ('Oakland-Fremont-Berkeley, CA', 'Trade, Transportation, and Utilities'),
-    'SMU06418844000000001': ('San Francisco-San Mateo-Redwood City, CA', 'Trade, Transportation, and Utilities'),
-    'SMU06419404000000001': ('San Jose-Sunnyvale-Santa Clara, CA', 'Trade, Transportation, and Utilities'),
-    'SMU06420344000000001': ('San Rafael, CA', 'Trade, Transportation, and Utilities'),
-    'SMU06422204000000001': ('Santa Rosa-Petaluma, CA', 'Trade, Transportation, and Utilities'),
-    'SMU06467004000000001': ('Vallejo, CA', 'Trade, Transportation, and Utilities')
-}
-
 
 # --- Title ----
 st.set_page_config(page_title="Bay Area Dashboard", layout="wide")
@@ -216,7 +31,7 @@ subtab = None
 if section == "Employment":
     subtab = st.sidebar.radio(
         "Employment Views:",
-        ["Employment", "Unemployment", "Regional Job Recovery", "Monthly Job Change", "Industry"],
+        ["Employment", "Unemployment", "Job Recovery", "Monthly Job Change", "Industry"],
         key="employment_subtab"
     )
 
@@ -238,8 +53,8 @@ if section == "Employment":
 
         Returns:
             list[dict] or None: A list of record dictionaries if successful, or None if an error occurs.
-
         """
+
         API_ENDPOINT = "https://data.ca.gov/api/3/action/datastore_search"
         RESOURCE_ID = "b4bc4656-7866-420f-8d87-4eda4c9996ed"
 
@@ -288,7 +103,6 @@ if section == "Employment":
                 - 'value' is the number of jobs (in actual counts),
                 - 'pct_change' is the percent change in employment from February 2020.
                 Returns None if the API call fails or data is missing.
-
         """
 
         rest_of_ca_series_ids = [
@@ -374,6 +188,7 @@ if section == "Employment":
             pd.DataFrame or None: DataFrame with ['date', 'value', 'pct_change'] columns,
             or None if all data fetches fail.
         """
+
         series_ids = [
             "SMS06349000000000001",  # Napa MSA
             "SMS06360840000000001",  # Oakland-Fremont-Hayward MD
@@ -452,9 +267,21 @@ if section == "Employment":
     @st.cache_data(ttl=86400)
     def fetch_us_payroll_data():
         """
-        Fetches national-level seasonally adjusted nonfarm payroll employment data for the U.S.
-        Computes percent change in employment relative to February 2020.
+        Fetches and processes national-level seasonally adjusted nonfarm payroll employment data
+        for the United States from the U.S. Bureau of Labor Statistics (BLS) API.
+
+        Retrieves monthly total nonfarm employment counts from January 2020 to the latest available month. 
+        Calculates the percent change in employment relative to February 2020 (pre-pandemic baseline).
+
+        Returns:
+            pd.DataFrame or None: DataFrame with the following columns:
+                - 'date': pandas datetime object representing each month.
+                - 'value': Number of jobs (in actual counts, not thousands).
+                - 'pct_change': Percent change in employment since February 2020.
+            
+            Returns None if the API call fails or the required data is unavailable.
         """
+
         SERIES_ID = "CES0000000001"  # U.S. nonfarm payroll, seasonally adjusted
         payload = {
             "seriesid": [SERIES_ID],
@@ -494,9 +321,26 @@ if section == "Employment":
     @st.cache_data(ttl=86400)
     def fetch_states_job_data(series_ids):
         """
-        Fetches monthly employment data from BLS API for a list of U.S. state series IDs,
-        and calculates percent change from February 2020 for each state.
+        Fetches and processes monthly seasonally adjusted nonfarm payroll employment data 
+        for multiple U.S. states from the Bureau of Labor Statistics (BLS) API.
+
+        Handles API limitations by batching requests in chunks of 25 series IDs. 
+        For each state, calculates the percent change in employment relative to February 2020 (pre-pandemic baseline).
+        Associates each series ID with its corresponding state name using the provided `state_code_map`.
+
+        Args:
+            series_ids (list of str): List of BLS series IDs representing state-level nonfarm payroll data.
+
+        Returns:
+            pd.DataFrame or None: A concatenated DataFrame containing:
+                - 'date': pandas datetime object for each month.
+                - 'value': Number of jobs (in actual counts, not thousands).
+                - 'pct_change': Percent change in employment since February 2020.
+                - 'State': Name of the U.S. state corresponding to each series.
+            
+            Returns None if no data is successfully fetched or processed.
         """
+
         def chunk_list(lst, size):
             return [lst[i:i+size] for i in range(0, len(lst), size)]
 
@@ -568,9 +412,9 @@ if section == "Employment":
 
         Returns:
             pd.DataFrame or None: A cleaned DataFrame with columns ['County', 'LaborForce', 'Employment',
-            'UnemploymentRate', 'date'], or None if input data is invalid or no valid date column is found.
-        
+            'UnemploymentRate', 'date'], or None if input data is invalid or no valid date column is found.    
         """
+
         if not data:
             return None
 
@@ -612,6 +456,23 @@ if section == "Employment":
 
 
     def show_unemployment_rate_chart(df):
+        """
+        Displays an interactive line chart of unemployment rate trends for Bay Area counties.
+
+        Provides a checkbox to select all counties by default, and a multiselect option 
+        for users to customize which counties to display. The chart shows the unemployment 
+        rate over time, with quarterly ticks (January, April, July, October) on the x-axis.
+
+        Args:
+            df (pd.DataFrame): A DataFrame containing at least the following columns:
+                - 'County': Name of the county.
+                - 'UnemploymentRate': Unemployment rate as a percentage.
+                - 'date': pandas datetime object representing the observation month.
+
+        Returns:
+            None. Displays an interactive Plotly line chart and renders it in the Streamlit app.
+        """
+
         st.subheader("Unemployment Rate Trend")
 
         counties = sorted(df["County"].unique().tolist())
@@ -668,15 +529,26 @@ if section == "Employment":
 
         st.plotly_chart(fig, use_container_width=True)
 
+
     def show_employment_comparison_chart(df):
         """
-        Creates a bar chart comparing employment levels between February 2020 
-        and the latest available month for each Bay Area county.
-        
+        Displays a side-by-side bar chart comparing employment levels in Bay Area counties 
+        between February 2020 (pre-pandemic baseline) and the latest available month.
+
+        The chart highlights job recovery progress by county and includes interactive bars 
+        showing actual employment levels for both time periods. Below the chart, the function 
+        provides summary statistics and a detailed table with changes in employment.
+
         Args:
-            df (pd.DataFrame): Processed employment data with columns 
-                            ['County', 'Employment', 'date', etc.]
+            df (pd.DataFrame): A processed DataFrame containing at least the following columns:
+                - 'County': Name of the county.
+                - 'Employment': Number of employed persons.
+                - 'date': pandas datetime object representing the observation month.
+
+        Returns:
+            None. Renders an interactive Plotly bar chart and Streamlit summary statistics.
         """
+
         latest_date = df["date"].max()
         st.subheader(f"Recovery from February 2020 to {latest_date.strftime('%B %Y')}")   
 
@@ -722,7 +594,8 @@ if section == "Employment":
             marker_color='#00aca2',
             text=comparison_df['Feb 2020'],
             texttemplate='%{text:,.0f}',
-            textposition='outside'
+            textposition='outside',
+            hovertemplate='%{x}<br>%{y:,.0f}<extra></extra>'
         ))
         
         # Add latest month bars
@@ -733,7 +606,8 @@ if section == "Employment":
             marker_color='#203864',
             text=comparison_df['Latest'],
             texttemplate='%{text:,.0f}',
-            textposition='outside'
+            textposition='outside',
+            hovertemplate='%{x}<br>%{y:,.0f}<extra></extra>'
         ))
         
         # Update layout
@@ -776,24 +650,52 @@ if section == "Employment":
         
         # Show detailed table
         st.subheader("Detailed Comparison")
+        latest_col_label = comparison_df["Latest Date"].iloc[0].strftime("%b %Y")
+
         display_df = comparison_df[['County', 'Feb 2020', 'Latest', 'Change', 'Pct Change']].copy()
+        display_df = display_df.rename(columns={
+            "Latest": latest_col_label,
+            "Pct Change": "Percent Change"
+        })
+
+        # Apply formatting
         display_df['Feb 2020'] = display_df['Feb 2020'].apply(lambda x: f"{x:,.0f}")
-        display_df['Latest'] = display_df['Latest'].apply(lambda x: f"{x:,.0f}")
+        display_df[latest_col_label] = display_df[latest_col_label].apply(lambda x: f"{x:,.0f}")
         display_df['Change'] = display_df['Change'].apply(lambda x: f"{x:+,.0f}")
-        display_df['Pct Change'] = display_df['Pct Change'].apply(lambda x: f"{x:+.1f}%")
-        
+        display_df['Percent Change'] = display_df['Percent Change'].apply(lambda x: f"{x:+.1f}%")
+
         # Color code the percentage change
         def color_pct_change(val):
             if '+' in val:
                 return 'color: green'
             else:
                 return 'color: red'
-        
-        styled_df = display_df.style.map(color_pct_change, subset=['Pct Change'])
+
+        styled_df = display_df.style.map(color_pct_change, subset=['Percent Change'])
+
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
 
+
     def show_job_recovery_overall(df_state, df_bay, df_us):
+        """
+        Visualizes overall job recovery trends since February 2020 for the Bay Area, 
+        the rest of California, and the United States.
+
+        Creates an interactive line chart comparing the percent change in nonfarm payroll 
+        employment relative to February 2020. The function highlights the latest data points 
+        for each region directly on the chart with labels. Quarterly ticks are used on the 
+        x-axis for readability.
+
+        Args:
+            df_state (pd.DataFrame): Rest of California employment data with columns ['date', 'pct_change'].
+            df_bay (pd.DataFrame): Bay Area employment data with columns ['date', 'pct_change'].
+            df_us (pd.DataFrame): U.S. employment data with columns ['date', 'pct_change'].
+
+        Returns:
+            None. Renders a Plotly line chart and source notes in Streamlit.
+        """
+
         st.subheader("Job Recovery Since February 2020")
 
         if df_state is not None and df_bay is not None and df_us is not None:
@@ -887,7 +789,7 @@ if section == "Employment":
             )
 
             latest_date = max(df_state["date"].max(), df_bay["date"].max(), df_us["date"].max())
-            buffered_latest = latest_date + timedelta(days=30)
+            buffered_latest = latest_date + timedelta(days=40)
 
             # Generate quarterly ticks (Jan, Apr, Jul, Oct) across all dates
             all_dates = pd.concat([df_state["date"], df_bay["date"], df_us["date"]])
@@ -930,7 +832,25 @@ if section == "Employment":
             </div>
             """, unsafe_allow_html=True)
 
+
     def show_job_recovery_by_state(state_code_map, fetch_states_job_data):
+        """
+        Visualizes state-level job recovery since February 2020 across selected U.S. states.
+
+        Creates an interactive line chart showing the percent change in nonfarm payroll employment 
+        relative to February 2020 for each selected state. Users can choose to compare individual states 
+        or select all states at once. The function highlights the latest available data point for each state 
+        directly on the graph for clarity.
+
+        Args:
+            state_code_map (dict): Dictionary mapping state names to BLS series IDs for nonfarm employment.
+            fetch_states_job_data (function): Function that fetches and processes BLS employment data 
+                                            for the provided list of series IDs.
+
+        Returns:
+            None. Displays an interactive Plotly line chart in Streamlit along with data source notes.
+        """
+
         st.subheader("Job Recovery by State Since February 2020")
 
         all_states = list(state_code_map.keys())
@@ -985,7 +905,7 @@ if section == "Employment":
                 else:
                     st.warning(f"No data available for {state}.")
 
-            max_date = df_states["date"].max() + timedelta(days=25)
+            max_date = df_states["date"].max() + timedelta(days=40)
             hover_mode = "x unified" if len(selected_states) <= 10 else "closest"
             all_dates = df_states["date"]
             quarterly_ticks = sorted(all_dates[all_dates.dt.month.isin([1, 4, 7, 10])].unique())
@@ -1033,10 +953,78 @@ if section == "Employment":
             """, unsafe_allow_html=True)
 
 
-    def show_sf_monthly_job_change():
-        st.subheader("Monthly Job Change in SF/San Mateo Subregion")
+    def show_regional_monthly_job_change():
+        """
+        Displays monthly job change trends for individual Bay Area regions with a user-selectable dropdown.
 
-        series_id = "SMS06418840000000001"
+        Provides an interactive visualization of monthly job gains and losses for selected 
+        Bay Area metropolitan divisions (MSAs) or metropolitan divisions (MDs). The user 
+        selects a region from a dropdown menu, and the function fetches corresponding BLS 
+        nonfarm payroll data, calculates monthly changes, and renders both a bar chart and 
+        a summary statistics table.
+
+        Features:
+            - Dropdown selection for 7 Bay Area regions.
+            - Monthly job change bar chart, color-coded for gains/losses.
+            - Summary table highlighting key statistics like largest gain/loss, recent trends, and averages.
+
+        Returns:
+            None. Outputs Streamlit visualizations and summary stats directly to the dashboard.
+        """
+        
+        # Define individual Bay Area regions
+        regions = {
+            "Napa MSA": "SMS06349000000000001",
+            "Oakland-Fremont-Berkeley MD": "SMS06360840000000001", 
+            "San Francisco-San Mateo-Redwood City MD": "SMS06418840000000001",
+            "San Jose-Sunnyvale-Santa Clara": "SMS06419400000000001",
+            "San Rafael MD": "SMS06420340000000001",
+            "Santa Rosa-Petaluma": "SMS06422200000000001",
+            "Vallejo": "SMS06467000000000001"
+        }
+        
+        # Dropdown for region selection
+        selected_region = st.selectbox(
+            "Select Bay Area Region:",
+            options=list(regions.keys()),
+            index=2  # Default to SF-San Mateo-Redwood City
+        )
+        
+        series_id = regions[selected_region]
+        
+        # Use the reusable function
+        df = fetch_and_process_job_data(series_id, selected_region)
+        if df is not None:
+            create_monthly_job_change_chart(df, selected_region)
+            create_job_change_summary_table(df)
+
+
+    def fetch_and_process_job_data(series_id, region_name):
+        """
+        Fetches nonfarm payroll employment data from the BLS API for a specific region 
+        and processes it to compute monthly job change.
+
+        The function:
+            - Sends a POST request to the BLS Public API for a given series ID.
+            - Filters out annual summary rows (M13).
+            - Converts data to monthly values in thousands of jobs.
+            - Calculates month-over-month job changes.
+            - Formats labels and assigns color codes for visualization (teal for gains, red for losses).
+
+        Args:
+            series_id (str): The BLS series ID for the selected region.
+            region_name (str): Human-readable name of the region (for warnings or error messages).
+
+        Returns:
+            pd.DataFrame or None: A DataFrame containing:
+                - 'date': Month and year as datetime.
+                - 'value': Total employment.
+                - 'monthly_change': Change in employment from previous month.
+                - 'label': String label for bar chart display (e.g., "5K" or "250").
+                - 'color': Color code for visualization (teal for gains, red for losses).
+            Returns None if data is unavailable or the API call fails.
+        """
+        
         payload = {
             "seriesid": [series_id],
             "startyear": "2020",
@@ -1051,70 +1039,121 @@ if section == "Employment":
             if "Results" in data and data["Results"]["series"]:
                 series = data["Results"]["series"][0]["data"]
                 df = pd.DataFrame(series)
-                df = df[df["period"] != "M13"]
+                df = df[df["period"] != "M13"]  # Remove annual data
                 df["date"] = pd.to_datetime(df["year"] + df["periodName"], format="%Y%B", errors="coerce")
                 df["value"] = pd.to_numeric(df["value"], errors="coerce") * 1000
                 df = df.sort_values("date")
                 df = df[df["date"] >= "2020-02-01"]
                 df["monthly_change"] = df["value"].diff()
                 df = df.dropna(subset=["monthly_change"])
+                
+                # Add formatting and color columns
                 df["label"] = df["monthly_change"].apply(
                     lambda x: f"{int(x/1000)}K" if abs(x) >= 1000 else f"{int(x)}"
                 )
                 df["color"] = df["monthly_change"].apply(lambda x: "#00aca2" if x >= 0 else "#e63946")
-
-                # Calculate dynamic y-axis range excluding April 2020
-                df_for_range = df[df["date"] != pd.to_datetime("2020-04-01")]
-                y_min = df_for_range["monthly_change"].min()
-                y_max = df_for_range["monthly_change"].max()
                 
-                # Add padding (10% of the range)
-                y_range = y_max - y_min
-                padding = y_range * 0.1
-                y_axis_min = y_min - padding
-                y_axis_max = y_max + padding
-
-                fig = go.Figure()
-                fig.add_trace(go.Bar(
-                    x=df["date"],
-                    y=df["monthly_change"],
-                    marker_color=df["color"],
-                    text=df["label"],
-                    textposition="outside",
-                    name="SF/San Mateo MD",
-                    hovertemplate="%{x|%B %Y}<br>Change: %{y:,.0f} Jobs<extra></extra>"
-                ))
-
-                fig.update_layout(
-                    title=f"February 2020 to {df['date'].max().strftime('%B %Y')}",
-                    xaxis_title="Month",
-                    yaxis_title="Job Change",
-                    showlegend=False,
-                    xaxis=dict(
-                        tickformat="%b\n%Y",
-                        dtick="M1",
-                        tickangle=0,
-                        title_font=dict(size=20),
-                        tickfont=dict(size=10)
-                    ),
-                    yaxis=dict(tickfont=dict(size=12),
-                            range=[y_axis_min, y_axis_max]),
-                    margin=dict(t=50, b=50),
-                )
-
-                st.plotly_chart(fig, use_container_width=True)
-                st.markdown("""
-                <div style='font-size: 12px; color: #666;'>
-                <strong>Source:</strong> Bureau of Labor Statistics (BLS). <strong>Note:</strong> Data are seasonally adjusted.<br>
-                <strong>Analysis:</strong> Bay Area Council Economic Institute
-                </div>
-                """, unsafe_allow_html=True)
+                return df
             else:
-                st.warning("No data returned from BLS for SF/San Mateo MD.")
+                st.warning(f"No data returned from BLS for {region_name}.")
+                return None
+                
         except Exception as e:
-            st.error(f"Failed to fetch or render chart: {e}")
+            st.error(f"Failed to fetch data for {region_name}: {e}")
+            return None
 
-        # Summary Table
+
+    def create_monthly_job_change_chart(df, region_name):
+        """
+        Creates a monthly job change bar chart for a specified Bay Area region.
+
+        The function:
+            - Plots month-over-month changes in employment as a bar chart.
+            - Colors bars teal for job gains and red for job losses.
+            - Displays formatted labels on each bar (e.g., "5K" or "250").
+            - Dynamically adjusts the y-axis range with padding, excluding the April 2020 outlier.
+            - Shows only quarterly ticks (Jan, Apr, Jul, Oct) for readability.
+            - Adds data source and analysis notes below the chart.
+
+        Args:
+            df (pd.DataFrame): DataFrame with columns ['date', 'monthly_change', 'label', 'color'].
+            region_name (str): Name of the Bay Area region to display in the chart title and legend.
+
+        Returns:
+            None. The function directly renders the chart in Streamlit using `st.plotly_chart()`.
+        """
+        
+        st.subheader(f"Monthly Job Change in {region_name}")
+        
+        # Calculate dynamic y-axis range excluding April 2020
+        df_for_range = df[df["date"] != pd.to_datetime("2020-04-01")]
+        y_min = df_for_range["monthly_change"].min()
+        y_max = df_for_range["monthly_change"].max()
+        
+        # Add padding (10% of the range)
+        y_range = y_max - y_min
+        padding = y_range * 0.1
+        y_axis_min = y_min - padding
+        y_axis_max = y_max + padding
+
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            x=df["date"],
+            y=df["monthly_change"],
+            marker_color=df["color"],
+            text=df["label"],
+            textposition="outside",
+            name=region_name,
+            hovertemplate="%{x|%B %Y}<br>Change: %{y:,.0f} Jobs<extra></extra>"
+        ))
+
+        quarterly_ticks = df["date"][df["date"].dt.month.isin([1, 4, 7, 10])].unique()
+
+        fig.update_layout(
+            title=f"February 2020 to {df['date'].max().strftime('%B %Y')}",
+            xaxis_title="Month",
+            yaxis_title="Job Change",
+            showlegend=False,
+            xaxis=dict(
+                tickvals=quarterly_ticks,
+                tickformat="%b\n%Y",
+                tickangle=0,
+                title_font=dict(size=20),
+                tickfont=dict(size=10)
+            ),
+            yaxis=dict(
+                tickfont=dict(size=12),
+                range=[y_axis_min, y_axis_max]
+            ),
+            margin=dict(t=50, b=50),
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+        st.markdown("""
+        <div style='font-size: 12px; color: #666;'>
+        <strong>Source:</strong> Bureau of Labor Statistics (BLS). <strong>Note:</strong> Data are seasonally adjusted.<br>
+        <strong>Analysis:</strong> Bay Area Council Economic Institute
+        </div>
+        """, unsafe_allow_html=True)
+
+
+    def create_job_change_summary_table(df):
+        """
+        Creates and displays a summary statistics table for monthly job changes.
+
+        Calculates key employment change metrics such as:
+            - Largest monthly job gain and loss (with date)
+            - Average job change over the last 6 months
+            - Number of months with job gains and losses
+            - Total number of months analyzed
+
+        The function outputs a styled summary table using Streamlit.
+
+        Args:
+            df (pd.DataFrame): A DataFrame containing monthly job change data with 
+                            columns ['date', 'monthly_change', 'label', 'color'].
+        """
+        
         st.subheader("Summary")
         
         # Get key statistics
@@ -1150,6 +1189,24 @@ if section == "Employment":
 
 
     def show_bay_area_monthly_job_change(df_bay):
+        """
+        Displays a monthly job change bar chart for the Bay Area region (aggregated across all subregions).
+
+        Calculates monthly changes in total employment from February 2020 onward, and visualizes the data 
+        as a color-coded bar chart (teal for job gains, red for job losses). April 2020 is excluded from 
+        y-axis range calculations to avoid distortion due to extreme outliers.
+
+        Also displays a summary statistics table showing:
+            - Largest monthly gain and loss
+            - Average change over the last 6 months
+            - Number of months with gains and losses
+            - Total months analyzed
+
+        Args:
+            df_bay (pd.DataFrame): A DataFrame containing total Bay Area employment data with columns 
+                                ['date', 'value'] where 'value' is the total employment count.
+        """
+        
         st.subheader("Monthly Job Change in the Bay Area")
 
         df_bay_monthly = df_bay.copy().sort_values("date")
@@ -1185,14 +1242,16 @@ if section == "Employment":
             hovertemplate="%{x|%B %Y}<br>Change: %{y:,.0f} Jobs<extra></extra>"
         ))
 
+        quarterly_ticks = df_bay_monthly["date"][df_bay_monthly["date"].dt.month.isin([1, 4, 7, 10])].unique()
+
         fig_monthly.update_layout(
             title=f"February 2020 to {df_bay_monthly['date'].max().strftime('%B %Y')}",
             xaxis_title="Month",
             yaxis_title="Job Change",
             showlegend=False,
             xaxis=dict(
+                tickvals=quarterly_ticks,
                 tickformat="%b\n%Y",
-                dtick="M1",
                 tickangle=0,
                 title_font=dict(size=20),
                 tickfont=dict(size=10)
@@ -1247,7 +1306,37 @@ if section == "Employment":
 
 
     def show_combined_industry_job_recovery_chart(series_mapping, BLS_API_KEY):
-        st.subheader("Job Recovery by Industry Since February 2020")
+        """
+        Displays a horizontal bar chart of job recovery by industry for the Bay Area, 
+        allowing the user to toggle between Post-Covid Recovery (Feb 2020 to latest month)
+        and Past-Year Recovery (latest 12-month period).
+
+        The function aggregates employment data across all Bay Area regions for each industry, 
+        calculates the percent change in employment from the selected baseline to the latest available month, 
+        and visualizes the results as a bar chart.
+
+        A derived category called 'Wholesale, Transportation, and Utilities' is calculated by subtracting
+        'Retail Trade' from 'Trade, Transportation, and Utilities'. The original 'Trade, Transportation, 
+        and Utilities' category is excluded from the final chart.
+
+        A summary table with employment levels, changes in job counts, and percentage changes is also displayed.
+
+        Args:
+            series_mapping (dict): Dictionary mapping BLS series IDs to tuples of (region, industry).
+            BLS_API_KEY (str): User's BLS API key for data access.
+
+        Returns:
+            None. Displays charts and tables directly in the Streamlit app.
+        """
+        
+        st.subheader("Job Recovery by Industry")
+        
+        # Add toggle for time period selection
+        recovery_period = st.radio(
+            "Select Recovery Period:",
+            ["Post-Covid Recovery", "Past-Year Recovery"],
+            horizontal=True
+        )
 
         # Step 1: Fetch data in chunks (BLS API has limits)
         series_ids = list(series_mapping.keys())
@@ -1316,49 +1405,63 @@ if section == "Employment":
             st.error("No valid data records could be processed.")
             return
         
-        # Debug: Show what industries we have data for
-        # industries_with_data = df['industry'].unique()
-        # st.write(f"Industries with data: {len(industries_with_data)}")
-        
-        # Step 3: Get February 2020 baseline and latest month data
-        feb_2020_date = pd.to_datetime("2020-02-01")
-        
-        # Filter for Feb 2020 data
-        feb_2020_df = df[df["date"] == feb_2020_date]
+        # Step 3: Set baseline and latest dates based on selected period
+        if recovery_period == "Post-Covid Recovery":
+            baseline_date = pd.to_datetime("2020-02-01")
+            baseline_label = "Feb 2020"
+            title_period = "Post-Covid Recovery"
+        else:  # Past-Year Recovery
+            # Get the latest available date and calculate 12 months prior
+            latest_date = df["date"].max()
+            baseline_date = latest_date - pd.DateOffset(months=12)
+            
+            # Find the closest actual date in the data to our calculated baseline
+            available_dates = df["date"].unique()
+            closest_baseline = min(available_dates, key=lambda x: abs(x - baseline_date))
+            baseline_date = closest_baseline
+            baseline_label = baseline_date.strftime("%b %Y")
+            title_period = "Past-Year Recovery"
         
         # Get the latest available date
         latest_date = df["date"].max()
+        
+        # Filter for baseline data
+        baseline_df = df[df["date"] == baseline_date]
+        
+        # Filter for latest data
         latest_df = df[df["date"] == latest_date]
         
-        # Debug: See dates for Feb 2020 data and latest data
-        # st.write(f"Baseline date: {feb_2020_date.strftime('%B %Y')}")
-        # st.write(f"Latest date: {latest_date.strftime('%B %Y')}")
+        # Check if we have data for both periods
+        if baseline_df.empty:
+            st.error(f"No data available for baseline period ({baseline_label})")
+            return
+        
+        if latest_df.empty:
+            st.error(f"No data available for latest period ({latest_date.strftime('%b %Y')})")
+            return
         
         # Step 4: Aggregate by industry for both periods
         # Sum across all regions for each industry
-        feb_totals = feb_2020_df.groupby("industry")["value"].sum()
+        baseline_totals = baseline_df.groupby("industry")["value"].sum()
         latest_totals = latest_df.groupby("industry")["value"].sum()
 
-        # Calculate 'Wholesale, Transportation, and Utilities'
-        if "Trade, Transportation, and Utilities" in feb_totals and "Retail Trade" in feb_totals:
-            feb_totals["Wholesale, Transportation, and Utilities"] = (
-                feb_totals["Trade, Transportation, and Utilities"] - feb_totals["Retail Trade"]
+        # Calculate 'Wholesale, Transportation, and Utilities' if applicable
+        if "Trade, Transportation, and Utilities" in baseline_totals and "Retail Trade" in baseline_totals:
+            baseline_totals["Wholesale, Transportation, and Utilities"] = (
+                baseline_totals["Trade, Transportation, and Utilities"] - baseline_totals["Retail Trade"]
             )
         if "Trade, Transportation, and Utilities" in latest_totals and "Retail Trade" in latest_totals:
             latest_totals["Wholesale, Transportation, and Utilities"] = (
                 latest_totals["Trade, Transportation, and Utilities"] - latest_totals["Retail Trade"]
             )
 
-        # Debug: Show which industries have both baseline and latest data
-        industries_with_both = set(feb_totals.index) & set(latest_totals.index)
-        # st.write(f"Industries with both baseline and latest data: {len(industries_with_both)}")
-        
         # Step 5: Calculate percent change only for industries with both data points
+        industries_with_both = set(baseline_totals.index) & set(latest_totals.index)
         pct_change = pd.Series(dtype=float)
         
         for industry in industries_with_both:
-            if feb_totals[industry] > 0:  # Avoid division by zero
-                change = ((latest_totals[industry] - feb_totals[industry]) / feb_totals[industry]) * 100
+            if baseline_totals[industry] > 0:  # Avoid division by zero
+                change = ((latest_totals[industry] - baseline_totals[industry]) / baseline_totals[industry]) * 100
                 pct_change[industry] = change
         
         if pct_change.empty:
@@ -1367,7 +1470,7 @@ if section == "Employment":
         
         # Sort by percent change
         pct_change = pct_change.sort_values()
-        pct_change = pct_change.drop("Trade, Transportation, and Utilities", errors="ignore")           # No need to include this anymore
+        pct_change = pct_change.drop("Trade, Transportation, and Utilities", errors="ignore")
         
         # Step 6: Create colors (red for negative, teal for positive)
         colors = ["#d1493f" if val < 0 else "#00aca2" for val in pct_change.values]
@@ -1381,14 +1484,14 @@ if section == "Employment":
             marker_color=colors,
             text=[f"{val:.1f}%" for val in pct_change.values],
             textposition="outside",
-            hovertemplate="%{y}<br>% Change: %{x:.1f}%<br>Feb 2020: %{customdata[0]:,.0f}<br>Latest: %{customdata[1]:,.0f}<extra></extra>",
-            customdata=[[feb_totals[industry], latest_totals[industry]] for industry in pct_change.index]
+            hovertemplate=f"%{{y}}<br>% Change: %{{x:.1f}}%<br>{baseline_label}: %{{customdata[0]:,.0f}}<br>{latest_date.strftime('%b %Y')}: %{{customdata[1]:,.0f}}<extra></extra>",
+            customdata=[[baseline_totals[industry], latest_totals[industry]] for industry in pct_change.index]
         ))
 
         fig.update_layout(
-            title=f"{feb_2020_date.strftime('%b %Y')} to {latest_date.strftime('%b %Y')}",
-            xaxis_title="% Change Since Feb 2020",
-            margin=dict(l=200, r=100, t=80, b=50),  # Increased left margin for long industry names
+            title=f"{title_period}: {baseline_label} to {latest_date.strftime('%b %Y')}",
+            xaxis_title=f"% Change Since {baseline_label}",
+            margin=dict(l=200, r=100, t=80, b=50),
             xaxis=dict(
                 tickformat=".0f",
                 range=[min(pct_change.min() - 5, -10), max(pct_change.max() + 5, 10)],
@@ -1397,7 +1500,7 @@ if section == "Employment":
             ),
             yaxis=dict(tickfont=dict(size=20)),
             showlegend=False,
-            height=600  # Make chart taller to accommodate all industries
+            height=600
         )
 
         st.plotly_chart(fig, use_container_width=True)
@@ -1412,13 +1515,22 @@ if section == "Employment":
         st.subheader("Summary")
         summary_df = pd.DataFrame({
             'Industry': pct_change.index,
-            'Feb 2020 Jobs': [f"{feb_totals[industry]:,.0f}" for industry in pct_change.index],
+            f'{baseline_label} Jobs': [f"{baseline_totals[industry]:,.0f}" for industry in pct_change.index],
             f'{latest_date.strftime("%b %Y")} Jobs': [f"{latest_totals[industry]:,.0f}" for industry in pct_change.index],
-            'Change': [f"{latest_totals[industry] - feb_totals[industry]:,.0f}" for industry in pct_change.index],
-            '% Change': [f"{val:.1f}%" for val in pct_change.values]
+            'Change': [f"{latest_totals[industry] - baseline_totals[industry]:,.0f}" for industry in pct_change.index],
+            'Percent Change': [f"{val:.1f}%" for val in pct_change.values]
         })
+
+        def color_percent(val):
+            if isinstance(val, str) and '-' in val:
+                return 'color: red'
+            else:
+                return 'color: green'
         
-        st.dataframe(summary_df, use_container_width=True, hide_index=True)
+        styled_summary = summary_df.style.applymap(color_percent, subset=['Percent Change'])
+
+        
+        st.dataframe(styled_summary, use_container_width=True, hide_index=True)
 
 
     # --- Main Dashboard Block ---
@@ -1444,20 +1556,45 @@ if section == "Employment":
             elif subtab == "Unemployment":
                 show_unemployment_rate_chart(processed_df)
 
-            elif subtab == "Regional Job Recovery":
+            elif subtab == "Job Recovery":
                 show_job_recovery_overall(df_state, df_bay, df_us)
+                # st.markdown("<br><br><br>", unsafe_allow_html=True)     # Vertical spacing for aesthetics
                 show_job_recovery_by_state(state_code_map, fetch_states_job_data)
 
             elif subtab == "Monthly Job Change":
                 region_choice = st.selectbox(
                     "Select Region:",
-                    options=["Greater Bay Area", "SF/San Mateo Subregion"]
+                    options=[
+                        "Greater Bay Area",
+                        "Napa MSA",
+                        "Oakland-Fremont-Berkeley MD", 
+                        "San Francisco-San Mateo-Redwood City MD",
+                        "San Jose-Sunnyvale-Santa Clara",
+                        "San Rafael MD",
+                        "Santa Rosa-Petaluma",
+                        "Vallejo"
+                    ]
                 )
 
-                if region_choice == "SF/San Mateo Subregion":
-                    show_sf_monthly_job_change()
-                elif region_choice == "Greater Bay Area":
+                if region_choice == "Greater Bay Area":
                     show_bay_area_monthly_job_change(df_bay)
+                else:
+                    # Map the selected region to its series ID
+                    regions = {
+                        "Napa MSA": "SMS06349000000000001",
+                        "Oakland-Fremont-Berkeley MD": "SMS06360840000000001", 
+                        "San Francisco-San Mateo-Redwood City MD": "SMS06418840000000001",
+                        "San Jose-Sunnyvale-Santa Clara": "SMS06419400000000001",
+                        "San Rafael MD": "SMS06420340000000001",
+                        "Santa Rosa-Petaluma": "SMS06422200000000001",
+                        "Vallejo": "SMS06467000000000001"
+                    }
+                    
+                    series_id = regions[region_choice]
+                    df = fetch_and_process_job_data(series_id, region_choice)
+                    if df is not None:
+                        create_monthly_job_change_chart(df, region_choice)
+                        create_job_change_summary_table(df)
 
             elif subtab == "Industry":
                 show_combined_industry_job_recovery_chart(series_mapping, BLS_API_KEY)
