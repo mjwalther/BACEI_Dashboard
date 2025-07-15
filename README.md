@@ -15,12 +15,12 @@ Data Dashboard for Bay Area Council Economic Institute
 2. **Install the required libraries**  
    Make sure you have Python installed, then run:
    ```bash
-   pip install streamlit pandas numpy matplotlib requests
+   pip install streamlit pandas numpy matplotlib requests plotly 
    ```
    or try...
    
    ```bash
-   pip3 install streamlit pandas numpy matplotlib requests
+   pip3 install streamlit pandas numpy matplotlib requests plotly
    ```
 
 4. **Run the dashboard**  
