@@ -6,7 +6,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import os
 from datetime import datetime, timedelta
-from data_mappings import state_code_map, series_mapping, bay_area_counties
+from data_mappings import state_code_map, series_mapping, bay_area_counties, regions, office_metros_mapping, rename_mapping
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -15,7 +15,24 @@ BLS_API_KEY= "15060bc07890456a95aa5d0076966247"
 
 # --- Title ----
 st.set_page_config(page_title="Bay Area Dashboard", layout="wide")
-st.title("Bay Area Economic Dashboard")
+# st.markdown(
+#     "<h1 style='margin-top: 0; text-align: center; color: #203864; font-size: 60px;'>Bay Area Economic Dashboard</h1>",
+#     unsafe_allow_html=True
+# )
+
+st.markdown(
+    """
+    <style>
+        .block-container {
+            padding-top: 1rem;
+        }
+    </style>
+    <h1 style='margin-top: 0; margin-bottom: 10px; color: #203864; font-size: 50px;'>
+        Bay Area Economic Dashboard
+    </h1>
+    """,
+    unsafe_allow_html=True
+)
 
 # --- BACEI Logo ---
 st.sidebar.image("BACEI Logo.png", use_container_width=True)
@@ -31,7 +48,7 @@ subtab = None
 if section == "Employment":
     subtab = st.sidebar.radio(
         "Employment Views:",
-        ["Employment", "Unemployment", "Job Recovery", "Monthly Job Change", "Industry"],
+        ["Employment", "Unemployment", "Job Recovery", "Monthly Change", "Industry", "Office Sectors"],
         key="employment_subtab"
     )
 
@@ -517,7 +534,8 @@ if section == "Employment":
                 tickfont=dict(size=10)
             ),
             yaxis=dict(
-                title="Unemployment Rate (%)",
+                title="Unemployment Rate",
+                ticksuffix="%",
                 title_font=dict(size=18),
                 tickfont=dict(size=12)
             ),
@@ -528,6 +546,12 @@ if section == "Employment":
             trace.hovertemplate = f"{trace.name}: " + "%{y:.1f}%<extra></extra>"
 
         st.plotly_chart(fig, use_container_width=True)
+        st.markdown("""
+        <div style='font-size: 12px; color: #666;'>
+        <strong>Source: </strong>Local Area Unemployment Statistics (LAUS), California Open Data Portal.<br>
+        <strong>Analysis:</strong> Bay Area Council Economic Institute.<br>
+        </div>
+        """, unsafe_allow_html=True)
 
 
     def show_employment_comparison_chart(df):
@@ -595,7 +619,7 @@ if section == "Employment":
             text=comparison_df['Feb 2020'],
             texttemplate='%{text:,.0f}',
             textposition='outside',
-            hovertemplate='%{x}<br>%{y:,.0f}<extra></extra>'
+            hovertemplate='<b>%{x}</b><br>%{y:,.0f} residents employed<extra></extra>'
         ))
         
         # Add latest month bars
@@ -607,14 +631,14 @@ if section == "Employment":
             text=comparison_df['Latest'],
             texttemplate='%{text:,.0f}',
             textposition='outside',
-            hovertemplate='%{x}<br>%{y:,.0f}<extra></extra>'
+            hovertemplate='<b>%{x}</b><br>%{y:,.0f} residents employed<extra></extra>'
         ))
         
         # Update layout
         fig.update_layout(
             title=f"February 2020 vs {df['date'].max().strftime('%B %Y')}",
             xaxis_title='County',
-            yaxis_title='Number of Employed Persons',
+            yaxis_title='Number of Employed Residents',
             barmode='group',
             height=600,
             showlegend=True,
@@ -628,7 +652,7 @@ if section == "Employment":
         st.markdown("""
         <div style='font-size: 12px; color: #666;'>
         <strong>Source: </strong>Local Area Unemployment Statistics (LAUS), California Open Data Portal.<br>
-        <strong>Analysis:</strong> Bay Area Council Economic Institute
+        <strong>Analysis:</strong> Bay Area Council Economic Institute.<br>
         </div>
         """, unsafe_allow_html=True)
         
@@ -828,7 +852,7 @@ if section == "Employment":
             st.markdown("""
             <div style='font-size: 12px; color: #666;'>
             <strong>Source:</strong> Bureau of Labor Statistics (BLS). <strong>Note:</strong> Data are seasonally adjusted.<br>
-            <strong>Analysis:</strong> Bay Area Council Economic Institute
+            <strong>Analysis:</strong> Bay Area Council Economic Institute.<br>
             </div>
             """, unsafe_allow_html=True)
 
@@ -948,55 +972,9 @@ if section == "Employment":
             st.markdown("""
             <div style='font-size: 12px; color: #666;'>
             <strong>Source:</strong> Bureau of Labor Statistics (BLS). <strong>Note:</strong> Data are seasonally adjusted.<br>
-            <strong>Analysis:</strong> Bay Area Council Economic Institute
+            <strong>Analysis:</strong> Bay Area Council Economic Institute.<br>
             </div>
             """, unsafe_allow_html=True)
-
-
-    def show_regional_monthly_job_change():
-        """
-        Displays monthly job change trends for individual Bay Area regions with a user-selectable dropdown.
-
-        Provides an interactive visualization of monthly job gains and losses for selected 
-        Bay Area metropolitan divisions (MSAs) or metropolitan divisions (MDs). The user 
-        selects a region from a dropdown menu, and the function fetches corresponding BLS 
-        nonfarm payroll data, calculates monthly changes, and renders both a bar chart and 
-        a summary statistics table.
-
-        Features:
-            - Dropdown selection for 7 Bay Area regions.
-            - Monthly job change bar chart, color-coded for gains/losses.
-            - Summary table highlighting key statistics like largest gain/loss, recent trends, and averages.
-
-        Returns:
-            None. Outputs Streamlit visualizations and summary stats directly to the dashboard.
-        """
-        
-        # Define individual Bay Area regions
-        regions = {
-            "Napa MSA": "SMS06349000000000001",
-            "Oakland-Fremont-Berkeley MD": "SMS06360840000000001", 
-            "San Francisco-San Mateo-Redwood City MD": "SMS06418840000000001",
-            "San Jose-Sunnyvale-Santa Clara": "SMS06419400000000001",
-            "San Rafael MD": "SMS06420340000000001",
-            "Santa Rosa-Petaluma": "SMS06422200000000001",
-            "Vallejo": "SMS06467000000000001"
-        }
-        
-        # Dropdown for region selection
-        selected_region = st.selectbox(
-            "Select Bay Area Region:",
-            options=list(regions.keys()),
-            index=2  # Default to SF-San Mateo-Redwood City
-        )
-        
-        series_id = regions[selected_region]
-        
-        # Use the reusable function
-        df = fetch_and_process_job_data(series_id, selected_region)
-        if df is not None:
-            create_monthly_job_change_chart(df, selected_region)
-            create_job_change_summary_table(df)
 
 
     def fetch_and_process_job_data(series_id, region_name):
@@ -1132,7 +1110,9 @@ if section == "Employment":
         st.markdown("""
         <div style='font-size: 12px; color: #666;'>
         <strong>Source:</strong> Bureau of Labor Statistics (BLS). <strong>Note:</strong> Data are seasonally adjusted.<br>
-        <strong>Analysis:</strong> Bay Area Council Economic Institute
+        <strong>Analysis:</strong> Bay Area Council Economic Institute.<br>
+        <strong>Regions:</strong> North Bay: Napa MSA, San Rafael MD, Santa Rosa-Petaluma, Vallejo.
+                    East Bay: Oakland-Fremont-Berkeley MD. South Bay: San Jose-Sunnyvale-Santa Clara, San Francisco-Peninsula: San Francisco-San Mateo-Redwood City MD<br>
         </div>
         """, unsafe_allow_html=True)
 
@@ -1266,7 +1246,7 @@ if section == "Employment":
         st.markdown("""
         <div style='font-size: 12px; color: #666;'>
         <strong>Source:</strong> Bureau of Labor Statistics (BLS). <strong>Note:</strong> Data are seasonally adjusted.<br>
-        <strong>Analysis:</strong> Bay Area Council Economic Institute
+        <strong>Analysis:</strong> Bay Area Council Economic Institute.<br>
         </div>
         """, unsafe_allow_html=True)
 
@@ -1334,7 +1314,7 @@ if section == "Employment":
         # Add toggle for time period selection
         recovery_period = st.radio(
             "Select Recovery Period:",
-            ["Post-Covid Recovery", "Past-Year Recovery"],
+            ["Since Feb 2020", "Last 12 Months"],
             horizontal=True
         )
 
@@ -1406,7 +1386,7 @@ if section == "Employment":
             return
         
         # Step 3: Set baseline and latest dates based on selected period
-        if recovery_period == "Post-Covid Recovery":
+        if recovery_period == "Since Feb 2020":
             baseline_date = pd.to_datetime("2020-02-01")
             baseline_label = "Feb 2020"
             title_period = "Post-Covid Recovery"
@@ -1490,15 +1470,16 @@ if section == "Employment":
 
         fig.update_layout(
             title=f"{title_period}: {baseline_label} to {latest_date.strftime('%b %Y')}",
-            xaxis_title=f"% Change Since {baseline_label}",
+            xaxis_title=f"Percent Change Since {baseline_label}",
             margin=dict(l=200, r=100, t=80, b=50),
             xaxis=dict(
                 tickformat=".0f",
+                ticksuffix="%",
                 range=[min(pct_change.min() - 5, -10), max(pct_change.max() + 5, 10)],
                 tickfont=dict(size=14),
-                title=dict(font=dict(size=20))
+                title=dict(font=dict(size=15))
             ),
-            yaxis=dict(tickfont=dict(size=20)),
+            yaxis=dict(tickfont=dict(size=15)),
             showlegend=False,
             height=600
         )
@@ -1507,7 +1488,7 @@ if section == "Employment":
         st.markdown("""
         <div style='font-size: 12px; color: #666;'>
         <strong>Source:</strong> Bureau of Labor Statistics (BLS). <strong>Note:</strong> Total Non-Farm Employment data is seasonally adjusted, while other industries are not seasonally adjusted.<br>
-        <strong>Analysis:</strong> Bay Area Council Economic Institute
+        <strong>Analysis:</strong> Bay Area Council Economic Institute.<br>
         </div>
         """, unsafe_allow_html=True)
 
@@ -1517,8 +1498,8 @@ if section == "Employment":
             'Industry': pct_change.index,
             f'{baseline_label} Jobs': [f"{baseline_totals[industry]:,.0f}" for industry in pct_change.index],
             f'{latest_date.strftime("%b %Y")} Jobs': [f"{latest_totals[industry]:,.0f}" for industry in pct_change.index],
-            'Change': [f"{latest_totals[industry] - baseline_totals[industry]:,.0f}" for industry in pct_change.index],
-            'Percent Change': [f"{val:.1f}%" for val in pct_change.values]
+            'Net Change': [f"{latest_totals[industry] - baseline_totals[industry]:+,.0f}" for industry in pct_change.index],
+            'Percent Change': [f"{val:+.1f}%" for val in pct_change.values]
         })
 
         def color_percent(val):
@@ -1527,17 +1508,177 @@ if section == "Employment":
             else:
                 return 'color: green'
         
-        styled_summary = summary_df.style.applymap(color_percent, subset=['Percent Change'])
+        styled_summary = summary_df.style.map(color_percent, subset=['Percent Change'])
+        st.dataframe(styled_summary, use_container_width=True, hide_index=True)
 
+
+    def show_office_tech_recovery_chart(office_metros_mapping, BLS_API_KEY):
+        """
+        Displays a horizontal bar chart showing percent change in Office/Tech sector jobs 
+        for selected metro areas, with a toggle between:
+        - Since Feb 2020
+        - Last 12 Months
+
+        Office/Tech jobs include: Information, Financial Activities, and Professional & Business Services.
+
+        Args:
+            office_metros_mapping (dict): Mapping of BLS series IDs to (region, sector).
+            BLS_API_KEY (str): User's BLS API key.
+
+        Returns:
+            None. Displays chart and summary in Streamlit.
+        """
+
+        st.subheader("Office Sector Job Recovery by Metro Area")
+
+        recovery_period = st.radio(
+            "Select Recovery Period:",
+            ["Since Feb 2020", "Last 12 Months"],
+            horizontal=True
+        )
+
+        # Step 1: Fetch Data
+        series_ids = list(office_metros_mapping.keys())
+        all_data = []
+
+        for i in range(0, len(series_ids), 25):
+            chunk = series_ids[i:i+25]
+            payload = {
+                "seriesid": chunk,
+                "startyear": "2020",
+                "endyear": str(datetime.now().year),
+                "registrationKey": BLS_API_KEY
+            }
+            response = requests.post("https://api.bls.gov/publicAPI/v2/timeseries/data/", json=payload, timeout=30)
+            data = response.json()
+
+            if "Results" in data and "series" in data["Results"]:
+                all_data.extend(data["Results"]["series"])
+            else:
+                st.warning(f"No data returned for chunk {i//25 + 1}")
+
+        # Step 2: Parse Data
+        records = []
+        for series in all_data:
+            sid = series["seriesID"]
+            if sid not in office_metros_mapping:
+                continue
+
+            metro, sector = office_metros_mapping[sid]
+
+            for entry in series["data"]:
+                if entry["period"] == "M13":
+                    continue
+
+                try:
+                    date = pd.to_datetime(entry["year"] + entry["periodName"], format="%Y%B", errors="coerce")
+                    value = float(entry["value"].replace(",", "")) * 1000
+                    records.append({
+                        "metro": metro,
+                        "sector": sector,
+                        "date": date,
+                        "value": value
+                    })
+                except:
+                    continue
+
+        df = pd.DataFrame(records)
+
+        # Step 3: Define baseline and latest dates
+        latest_date = df["date"].max()
+
+        if recovery_period == "Since Feb 2020":
+            baseline_date = pd.to_datetime("2020-02-01")
+            baseline_label = "Feb 2020"
+            title_suffix = f"Feb 2020 to {latest_date.strftime('%b %Y')}"
+        else:
+            baseline_date = latest_date - pd.DateOffset(months=12)
+            available_dates = df["date"].unique()
+            baseline_date = min(available_dates, key=lambda x: abs(x - baseline_date))
+            baseline_label = baseline_date.strftime("%b %Y")
+            title_suffix = f"{baseline_label} to {latest_date.strftime('%b %Y')}"
+
+        # Step 4: Aggregate Office/Tech sectors per metro
+        office_sectors = ["Information", "Financial Activities", "Professional and Business Services"]
+
+        baseline_df = df[(df["date"] == baseline_date) & (df["sector"].isin(office_sectors))]
+        latest_df = df[(df["date"] == latest_date) & (df["sector"].isin(office_sectors))]
+
+        baseline_totals = baseline_df.groupby("metro")["value"].sum()
+        latest_totals = latest_df.groupby("metro")["value"].sum()
+
+        # Step 5: Calculate Percent Change
+        common_metros = set(baseline_totals.index) & set(latest_totals.index)
+        pct_change = pd.Series({
+            metro: ((latest_totals[metro] - baseline_totals[metro]) / baseline_totals[metro]) * 100
+            for metro in common_metros if baseline_totals[metro] > 0
+        }).sort_values(ascending=True)
+
+        short_names = [rename_mapping.get(metro, metro) for metro in pct_change.index]
+
+        # Step 6: Red for negative, Green for positive
+        colors = ["#d1493f" if val < 0 else "#00aca2" for val in pct_change.values]
+
+        # Step 7: Create Chart
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            y=short_names,
+            x=pct_change.values,
+            orientation='h',
+            marker_color=colors,
+            text=[f"{val:.1f}%" for val in pct_change.values],
+            textposition="outside",
+            hovertemplate="%{y}<br>% Change: %{x:.1f}%<br>" +
+                        f"{baseline_label}: " + "%{customdata[0]:,.0f}" +
+                        f"<br>{latest_date.strftime('%b %Y')}: " + "%{customdata[1]:,.0f}<extra></extra>",
+            customdata=[[baseline_totals[metro], latest_totals[metro]] for metro in pct_change.index]
+        ))
+
+        fig.update_layout(
+            title=f"Employment in Key Office Sectors by Metro Area: {title_suffix}",
+            xaxis_title=f"Percent Change Since {baseline_label}",
+            margin=dict(l=200, r=100, t=80, b=50),
+            xaxis=dict(tickformat=".0f",
+                       tickfont=dict(size=14),
+                       ticksuffix="%",
+                       title=dict(font=dict(size=15))
+                       ),
+            yaxis=dict(tickfont=dict(size=15)),
+            showlegend=False,
+            height=700
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+        st.markdown("""
+            <div style='font-size: 12px; color: #666;'>
+            <strong>Source:</strong> Bureau of Labor Statistics (BLS). <strong>Note:</strong> Data are not seasonally adjusted. Knowledge industries include: Information, Financial Activities, and Professional and Business Services.<br>
+            <strong>Analysis:</strong> Bay Area Council Economic Institute.<br>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # Step 8: Summary Table
+        st.subheader("Summary")
+        summary_df = pd.DataFrame({
+            'Metro': short_names,
+            f'{baseline_label} Jobs': [f"{baseline_totals[metro]:,.0f}" for metro in pct_change.index],
+            f'{latest_date.strftime("%b %Y")} Jobs': [f"{latest_totals[metro]:,.0f}" for metro in pct_change.index],
+            'Net Change': [f"{latest_totals[metro] - baseline_totals[metro]:+,.0f}" for metro in pct_change.index],
+            'Percent Change': [f"{val:+.1f}%" for val in pct_change.values]
+        })
+
+        def color_percent(val):
+            if isinstance(val, str) and '-' in val:
+                return 'color: red'
+            else:
+                return 'color: green'
         
+        styled_summary = summary_df.style.map(color_percent, subset=['Percent Change'])
         st.dataframe(styled_summary, use_container_width=True, hide_index=True)
 
 
     # --- Main Dashboard Block ---
 
     if section == "Employment":
-        st.header("Employment")
-
         # Process employment / unemployment data
         raw_data = fetch_unemployment_data()
         processed_df = process_unemployment_data(raw_data)
@@ -1561,44 +1702,61 @@ if section == "Employment":
                 # st.markdown("<br><br><br>", unsafe_allow_html=True)     # Vertical spacing for aesthetics
                 show_job_recovery_by_state(state_code_map, fetch_states_job_data)
 
-            elif subtab == "Monthly Job Change":
+            elif subtab == "Monthly Change":
+                
                 region_choice = st.selectbox(
                     "Select Region:",
                     options=[
-                        "Greater Bay Area",
-                        "Napa MSA",
-                        "Oakland-Fremont-Berkeley MD", 
-                        "San Francisco-San Mateo-Redwood City MD",
-                        "San Jose-Sunnyvale-Santa Clara",
-                        "San Rafael MD",
-                        "Santa Rosa-Petaluma",
-                        "Vallejo"
+                        "9-county Bay Area",
+                        "North Bay",
+                        "East Bay",
+                        "San Francisco-Peninsula",
+                        "South Bay",
                     ]
                 )
 
-                if region_choice == "Greater Bay Area":
+                if region_choice == "9-county Bay Area":
                     show_bay_area_monthly_job_change(df_bay)
                 else:
-                    # Map the selected region to its series ID
-                    regions = {
-                        "Napa MSA": "SMS06349000000000001",
-                        "Oakland-Fremont-Berkeley MD": "SMS06360840000000001", 
-                        "San Francisco-San Mateo-Redwood City MD": "SMS06418840000000001",
-                        "San Jose-Sunnyvale-Santa Clara": "SMS06419400000000001",
-                        "San Rafael MD": "SMS06420340000000001",
-                        "Santa Rosa-Petaluma": "SMS06422200000000001",
-                        "Vallejo": "SMS06467000000000001"
-                    }
-                    
-                    series_id = regions[region_choice]
-                    df = fetch_and_process_job_data(series_id, region_choice)
-                    if df is not None:
-                        create_monthly_job_change_chart(df, region_choice)
-                        create_job_change_summary_table(df)
+                    series_id_or_list = regions[region_choice]
+                    if isinstance(series_id_or_list, list):
+                        # Multiple series ("North Bay" includes 4 regions)
+                        dfs = []
+                        for sid in series_id_or_list:
+                            df_r = fetch_and_process_job_data(sid, region_choice)
+                            if df_r is not None:
+                                dfs.append(df_r[["date", "monthly_change"]])
+
+                        if dfs:
+                            # Merge and sum job changes on 'date'
+                            df_merged = dfs[0].copy()
+                            for other_df in dfs[1:]:
+                                df_merged = df_merged.merge(other_df, on="date", suffixes=("", "_tmp"))
+                                df_merged["monthly_change"] += df_merged["monthly_change_tmp"]
+                                df_merged.drop(columns=["monthly_change_tmp"], inplace=True)
+
+                            # Add label and color
+                            df_merged["label"] = df_merged["monthly_change"].apply(
+                                lambda x: f"{int(x/1000)}K" if abs(x) >= 1000 else f"{int(x)}"
+                            )
+                            df_merged["color"] = df_merged["monthly_change"].apply(lambda x: "#00aca2" if x >= 0 else "#e63946")
+
+                            create_monthly_job_change_chart(df_merged, region_choice)
+                            create_job_change_summary_table(df_merged)
+                        else:
+                            st.warning(f"No data available for {region_choice}.")
+                    else:
+                        # Single region (e.g., "East Bay", "South Bay", "SF-Peninsula")
+                        df = fetch_and_process_job_data(series_id_or_list, region_choice)
+                        if df is not None:
+                            create_monthly_job_change_chart(df, region_choice)
+                            create_job_change_summary_table(df)
 
             elif subtab == "Industry":
                 show_combined_industry_job_recovery_chart(series_mapping, BLS_API_KEY)
 
+            elif subtab == "Office Sectors":
+                show_office_tech_recovery_chart(office_metros_mapping, BLS_API_KEY)
 
 
     elif section == "Population":

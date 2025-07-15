@@ -1,3 +1,15 @@
+# Mapping of Bay Area regions to  BLS nonfarm payroll series IDs (seasonally adjusted)
+regions = {
+    # Napa MSA, San Rafael MD, Santa Rosa-Petaluma, Vallejo
+    "North Bay": ["SMS06349000000000001", "SMS06420340000000001", "SMS06422200000000001", "SMS06467000000000001"],
+    # Oakland-Fremont-Berkeley MD
+    "East Bay": "SMS06360840000000001", 
+    # San Francisco-San Mateo-Redwood City MD
+    "San Francisco-Peninsula": "SMS06418840000000001",
+    # San Jose-Sunnyvale-Santa Clara
+    "South Bay": "SMS06419400000000001",
+}
+
 # Mapping of U.S. states to BLS nonfarm payroll series IDs (seasonally adjusted)
 state_code_map = {
     "Alabama": "SMS01000000000000001",
@@ -181,4 +193,76 @@ series_mapping = {
     'SMU06420344000000001': ('San Rafael, CA', 'Trade, Transportation, and Utilities'),
     'SMU06422204000000001': ('Santa Rosa-Petaluma, CA', 'Trade, Transportation, and Utilities'),
     'SMU06467004000000001': ('Vallejo, CA', 'Trade, Transportation, and Utilities')
+}
+
+
+# Mapping for BLS employment numbers in office / teach industries across major metros
+office_metros_mapping = {
+    'SMU13120605000000001': ('Atlanta-Sandy Springs-Roswell, GA', 'Information'),
+    'SMU13120605500000001': ('Atlanta-Sandy Springs-Roswell, GA', 'Financial Activities'),
+    'SMU13120606000000001': ('Atlanta-Sandy Springs-Roswell, GA', 'Professional and Business Services'),
+    'SMU48124205000000001': ('Austin-Round Rock-San Marcos, TX', 'Information'),
+    'SMU48124205500000001': ('Austin-Round Rock-San Marcos, TX', 'Financial Activities'),
+    'SMU48124206000000001': ('Austin-Round Rock-San Marcos, TX', 'Professional and Business Services'),
+    'SMU25144605000000001': ('Boston-Cambridge-Newton, MA-NH', 'Information'),
+    'SMU25144605500000001': ('Boston-Cambridge-Newton, MA-NH', 'Financial Activities'),
+    'SMU25144606000000001': ('Boston-Cambridge-Newton, MA-NH', 'Professional and Business Services'),
+    'SMU17169805000000001': ('Chicago-Naperville-Elgin, IL-IN-WI', 'Information'),
+    'SMU17169805500000001': ('Chicago-Naperville-Elgin, IL-IN-WI', 'Financial Activities'),
+    'SMU17169806000000001': ('Chicago-Naperville-Elgin, IL-IN-WI', 'Professional and Business Services'),
+    'SMU48191005000000001': ('Dallas-Fort Worth-Arlington, TX', 'Information'),
+    'SMU48191005500000001': ('Dallas-Fort Worth-Arlington, TX', 'Financial Activities'),
+    'SMU48191006000000001': ('Dallas-Fort Worth-Arlington, TX', 'Professional and Business Services'),
+    'SMU08197405000000001': ('Denver-Aurora-Centennial, CO', 'Information'),
+    'SMU08197405500000001': ('Denver-Aurora-Centennial, CO', 'Financial Activities'),
+    'SMU08197406000000001': ('Denver-Aurora-Centennial, CO', 'Professional and Business Services'),
+    'SMU48264205000000001': ('Houston-Pasadena-The Woodlands, TX', 'Information'),
+    'SMU48264205500000001': ('Houston-Pasadena-The Woodlands, TX', 'Financial Activities'),
+    'SMU48264206000000001': ('Houston-Pasadena-The Woodlands, TX', 'Professional and Business Services'),
+    'SMU06310805000000001': ('Los Angeles-Long Beach-Anaheim, CA', 'Information'),
+    'SMU06310805500000001': ('Los Angeles-Long Beach-Anaheim, CA', 'Financial Activities'),
+    'SMU06310806000000001': ('Los Angeles-Long Beach-Anaheim, CA', 'Professional and Business Services'),
+    'SMU12331005000000001': ('Miami-Fort Lauderdale-West Palm Beach, FL', 'Information'),
+    'SMU12331005500000001': ('Miami-Fort Lauderdale-West Palm Beach, FL', 'Financial Activities'),
+    'SMU12331006000000001': ('Miami-Fort Lauderdale-West Palm Beach, FL', 'Professional and Business Services'),
+    'SMU36356205000000001': ('New York-Newark-Jersey City, NY-NJ', 'Information'),
+    'SMU36356205500000001': ('New York-Newark-Jersey City, NY-NJ', 'Financial Activities'),
+    'SMU36356206000000001': ('New York-Newark-Jersey City, NY-NJ', 'Professional and Business Services'),
+    'SMU04380605000000001': ('Phoenix-Mesa-Chandler, AZ', 'Information'),
+    'SMU04380605500000001': ('Phoenix-Mesa-Chandler, AZ', 'Financial Activities'),
+    'SMU04380606000000001': ('Phoenix-Mesa-Chandler, AZ', 'Professional and Business Services'),
+    'SMU06417405000000001': ('San Diego-Chula Vista-Carlsbad, CA', 'Information'),
+    'SMU06417405500000001': ('San Diego-Chula Vista-Carlsbad, CA', 'Financial Activities'),
+    'SMU06417406000000001': ('San Diego-Chula Vista-Carlsbad, CA', 'Professional and Business Services'),
+    'SMU06418605000000001': ('San Francisco-Oakland-Fremont, CA', 'Information'),
+    'SMU06418605500000001': ('San Francisco-Oakland-Fremont, CA', 'Financial Activities'),
+    'SMU06418606000000001': ('San Francisco-Oakland-Fremont, CA', 'Professional and Business Services'),
+    'SMU06419405000000001': ('San Jose-Sunnyvale-Santa Clara, CA', 'Information'),
+    'SMU06419405500000001': ('San Jose-Sunnyvale-Santa Clara, CA', 'Financial Activities'),
+    'SMU06419406000000001': ('San Jose-Sunnyvale-Santa Clara, CA', 'Professional and Business Services'),
+    'SMU53426605000000001': ('Seattle-Tacoma-Bellevue, WA', 'Information'),
+    'SMU53426605500000001': ('Seattle-Tacoma-Bellevue, WA', 'Financial Activities'),
+    'SMU53426606000000001': ('Seattle-Tacoma-Bellevue, WA', 'Professional and Business Services'),
+    'SMU11479005000000001': ('Washington-Arlington-Alexandria, DC-VA-MD-WV', 'Information'),
+    'SMU11479005500000001': ('Washington-Arlington-Alexandria, DC-VA-MD-WV', 'Financial Activities'),
+    'SMU11479006000000001': ('Washington-Arlington-Alexandria, DC-VA-MD-WV', 'Professional and Business Services'),
+}
+
+rename_mapping = {
+    "Atlanta-Sandy Springs-Roswell, GA": "Atlanta",
+    "Austin-Round Rock-San Marcos, TX": "Austin",
+    "Boston-Cambridge-Newton, MA-NH": "Boston",
+    "Chicago-Naperville-Elgin, IL-IN-WI": "Chicago",
+    "Dallas-Fort Worth-Arlington, TX": "Dallas",
+    "Denver-Aurora-Centennial, CO": "Denver",
+    "Houston-Pasadena-The Woodlands, TX": "Houston",
+    "Los Angeles-Long Beach-Anaheim, CA": "Los Angeles",
+    "Miami-Fort Lauderdale-West Palm Beach, FL": "Miami",
+    "New York-Newark-Jersey City, NY-NJ": "New York",
+    "Phoenix-Mesa-Chandler, AZ": "Phoenix",
+    "San Diego-Chula Vista-Carlsbad, CA": "San Diego",
+    "San Francisco-Oakland-Fremont, CA": "San Francisco",
+    "San Jose-Sunnyvale-Santa Clara, CA": "San Jose",
+    "Seattle-Tacoma-Bellevue, WA": "Seattle",
+    "Washington-Arlington-Alexandria, DC-VA-MD-WV": "Washington D.C."
 }
