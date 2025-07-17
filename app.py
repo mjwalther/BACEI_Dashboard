@@ -484,6 +484,8 @@ if section == "Employment":
             df (pd.DataFrame): A DataFrame containing at least the following columns:
                 - 'County': Name of the county.
                 - 'UnemploymentRate': Unemployment rate as a percentage.
+                - 'Unemployment': Total unemployment count.
+                - 'LaborForce': Total labor force count.
                 - 'date': pandas datetime object representing the observation month.
 
         Returns:
@@ -494,33 +496,59 @@ if section == "Employment":
 
         counties = sorted(df["County"].unique().tolist())
 
-        select_all = st.checkbox("Select all Bay Area Counties", value=True, key="select_all_checkbox")
+        select_all = st.checkbox("Select all Bay Area Counties", value=False, key="select_all_checkbox")
 
         # Dropdown to select counties
         if select_all:
-            selected_counties = counties
+            default_counties = counties
         else:
-            selected_counties = st.multiselect(
-                "Select counties to display:",
-                options = counties,
-                default = []
-            )
+            default_counties = []
 
-        # User personalizes which counties to view
-        if not selected_counties:
-            st.info("Please select at least one county.")
-            return
+        selected_counties = st.multiselect(
+            "Select counties to display:",
+            options = counties,
+            default = default_counties
+        )
 
-        filtered_df = df[df["County"].isin(selected_counties)]
+        # Calculate Bay Area aggregate trend - always shown
+        bay_area_agg = df.groupby('date').agg({
+            'Unemployment': 'sum',
+            'LaborForce': 'sum'
+        }).reset_index()
+
+        # Calculate Bay Area unemployment rate
+        bay_area_agg['UnemploymentRate'] = (bay_area_agg['Unemployment'] / bay_area_agg['LaborForce']) * 100
+        bay_area_agg['County'] = 'Bay Area Total'
+        
+        bay_area_trend_df = bay_area_agg[['County', 'date', 'UnemploymentRate']]
+
+        # Prepare data for plotting
+        plot_data = [bay_area_trend_df]  # Always include Bay Area trend
+        
+        if selected_counties:
+            county_data = df[df["County"].isin(selected_counties)]
+            plot_data.append(county_data)
+        
+        # Combine all data for plotting
+        combined_df = pd.concat(plot_data, ignore_index=True)
+        
         fig = px.line(
-            filtered_df,
+            combined_df,
             x = "date",
             y = "UnemploymentRate",
             color = "County",
             title = "Unemployment Rate Over Time"
         )
 
-        quarterly_ticks = filtered_df["date"][filtered_df["date"].dt.month.isin([1, 4, 7, 10])].dt.strftime("%Y-%m-01").unique().tolist()
+        # Style the Bay Area trend line differently
+        for trace in fig.data:
+            if trace.name == 'Bay Area Total':
+                trace.update(
+                    line=dict(width=4, dash='dash'),
+                    marker=dict(size=8)
+                )
+
+        quarterly_ticks = combined_df["date"][combined_df["date"].dt.month.isin([1, 4, 7, 10])].dt.strftime("%Y-%m-01").unique().tolist()
 
         fig.update_layout(
             hovermode="x unified",
