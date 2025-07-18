@@ -6,7 +6,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import os
 from datetime import datetime, timedelta
-from data_mappings import state_code_map, series_mapping, bay_area_counties, regions, office_metros_mapping, rename_mapping
+from data_mappings import state_code_map, series_mapping, bay_area_counties, regions, office_metros_mapping, rename_mapping, color_map
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -15,10 +15,6 @@ BLS_API_KEY= "15060bc07890456a95aa5d0076966247"
 
 # --- Title ----
 st.set_page_config(page_title="Bay Area Dashboard", layout="wide")
-# st.markdown(
-#     "<h1 style='margin-top: 0; text-align: center; color: #203864; font-size: 60px;'>Bay Area Economic Dashboard</h1>",
-#     unsafe_allow_html=True
-# )
 
 st.markdown(
     """
@@ -27,7 +23,7 @@ st.markdown(
             padding-top: 1rem;
         }
     </style>
-    <h1 style='margin-top: 0; margin-bottom: 10px; color: #203864; font-size: 50px;'>
+    <h1 style='margin-top: 0; margin-bottom: 10px; color: #203864; font-family: "Avenir Black"; font-size: 50px;'>
         Bay Area Economic Dashboard
     </h1>
     """,
@@ -282,6 +278,81 @@ if section == "Employment":
         
 
     @st.cache_data(ttl=86400)
+    def fetch_sonoma_payroll_data():
+        """
+        SONOMA COUNTY ONLY
+        """
+
+        series_ids = [
+            "SMS06422200000000001"  # Santa Rosa-Petaluma MSA  
+        ]
+
+        payload = {
+            "seriesid": series_ids,
+            "startyear": "2020",
+            "endyear": str(datetime.now().year),
+            "registrationKey": BLS_API_KEY
+        }
+
+        try:
+            response = requests.post(
+                "https://api.bls.gov/publicAPI/v2/timeseries/data/",
+                json=payload, timeout=30
+            )
+            data = response.json()
+            if "Results" not in data or "series" not in data["Results"]:
+                st.error("BLS API error: No results returned.")
+                return None
+
+            all_series = []
+            for series in data["Results"]["series"]:
+                if not series["data"]:
+                    st.warning(f"No data found for series ID: {series['seriesID']}")
+                    continue
+                try:
+                    df = pd.DataFrame(series["data"])
+                    df = df[df["period"] != "M13"]  # Exclude annual average rows
+                    df["date"] = pd.to_datetime(df["year"] + df["periodName"], format="%Y%B", errors="coerce")
+
+                    df["value"] = pd.to_numeric(df["value"], errors="coerce") * 1000
+                    df = df[["date", "value"]].sort_values("date")
+                    all_series.append(df)
+                except Exception as e:
+                    st.warning(f"Error processing series {series['seriesID']}: {e}")
+
+            if not all_series:
+                st.error("No Sonoma payroll data could be processed.")
+                return None
+
+            # Merge all series on date by summing values
+            merged_df = all_series[0].copy()
+            for other_df in all_series[1:]:
+                merged_df = pd.merge(merged_df, other_df, on="date", how="outer", suffixes=("", "_x"))
+
+                # If multiple columns named 'value', sum and clean
+                value_cols = [col for col in merged_df.columns if "value" in col]
+                merged_df["value"] = merged_df[value_cols].sum(axis=1, skipna=True)
+                merged_df = merged_df[["date", "value"]]
+
+            merged_df = merged_df.sort_values("date")
+
+            # Baseline = Feb 2020
+            baseline = merged_df.loc[merged_df["date"] == "2020-02-01", "value"]
+            if baseline.empty or pd.isna(baseline.iloc[0]):
+                st.warning("No baseline value found for Sonoma (Feb 2020).")
+                return None
+
+            baseline_value = baseline.iloc[0]
+            merged_df["pct_change"] = (merged_df["value"] / baseline_value - 1) * 100
+
+            return merged_df
+
+        except Exception as e:
+            st.error(f"Failed to fetch Sonoma BLS data: {e}")
+            return None
+        
+
+    @st.cache_data(ttl=86400)
     def fetch_us_payroll_data():
         """
         Fetches and processes national-level seasonally adjusted nonfarm payroll employment data
@@ -491,9 +562,7 @@ if section == "Employment":
         Returns:
             None. Displays an interactive Plotly line chart and renders it in the Streamlit app.
         """
-
-        st.subheader("Unemployment Rate Trend")
-
+        
         counties = sorted(df["County"].unique().tolist())
 
         select_all = st.checkbox("Select all Bay Area Counties", value=False, key="select_all_checkbox")
@@ -518,7 +587,7 @@ if section == "Employment":
 
         # Calculate Bay Area unemployment rate
         bay_area_agg['UnemploymentRate'] = (bay_area_agg['Unemployment'] / bay_area_agg['LaborForce']) * 100
-        bay_area_agg['County'] = 'Bay Area Total'
+        bay_area_agg['County'] = '9-county Bay Area'
         
         bay_area_trend_df = bay_area_agg[['County', 'date', 'UnemploymentRate']]
 
@@ -537,14 +606,14 @@ if section == "Employment":
             x = "date",
             y = "UnemploymentRate",
             color = "County",
-            title = "Unemployment Rate Over Time"
+            color_discrete_map=color_map
         )
 
         # Style the Bay Area trend line differently
         for trace in fig.data:
-            if trace.name == 'Bay Area Total':
+            if trace.name == '9-county Bay Area':
                 trace.update(
-                    line=dict(width=4, dash='dash'),
+                    line=dict(width=2, dash='dash'),
                     marker=dict(size=8)
                 )
 
@@ -552,22 +621,47 @@ if section == "Employment":
 
         fig.update_layout(
             hovermode="x unified",
+            title=dict(
+                text="Unemployment Rate Over Time",
+                x=0.5,
+                xanchor='center',
+                font=dict(family="Avenir Black", size=20)
+            ),
             xaxis=dict(
                 title="Date",
+                title_font=dict(family="Avenir Medium", size=18, color="black"),
                 tickvals=quarterly_ticks,
                 tickformat="%b\n%Y",
                 dtick="M1",
                 tickangle=0,
-                title_font=dict(size=18),
-                tickfont=dict(size=10)
+                tickfont=dict(family="Avenir", size=12, color="black"),
             ),
             yaxis=dict(
                 title="Unemployment Rate",
                 ticksuffix="%",
-                title_font=dict(size=18),
-                tickfont=dict(size=12)
+                title_font=dict(family="Avenir Medium", size=18, color="black"),
+                tickfont=dict(family="Avenir", size=12, color="black")
             ),
-            title_font=dict(size=20)
+            legend=dict(
+                title=dict(
+                    text="Region",  # Or any title you prefer
+                    font=dict(
+                        family="Avenir Black",  # Bold/dark font
+                        size=14,
+                        color="black"
+                    )
+                ),
+                font=dict(
+                    family="Avenir",
+                    size=15,
+                    color="black"
+                ),
+                orientation="v",
+                x=1.01,
+                y=1
+            ),
+            title_font = dict(family="Avenir Black", size=20)
+
         )
 
         for trace in fig.data:
@@ -575,11 +669,56 @@ if section == "Employment":
 
         st.plotly_chart(fig, use_container_width=True)
         st.markdown("""
-        <div style='font-size: 12px; color: #666;'>
-        <strong>Source: </strong>Local Area Unemployment Statistics (LAUS), California Open Data Portal.<br>
-        <strong>Analysis:</strong> Bay Area Council Economic Institute.<br>
+        <div style='font-size: 12px; color: #666; font-family: "Avenir Light", sans-serif;'>
+        <strong style='font-family: "Avenir Medium", sans-serif;'>Source: </strong>Local Area Unemployment Statistics (LAUS), California Open Data Portal.<br>
+        <strong style='font-family: "Avenir Medium", sans-serif;'>Analysis:</strong> Bay Area Council Economic Institute.<br>
         </div>
         """, unsafe_allow_html=True)
+
+        # Summary Table
+        st.subheader('Summary')
+        summary_data = []
+        
+        for county in combined_df['County'].unique():
+            county_data = combined_df[combined_df['County'] == county]
+            
+            # Get the most recent unemployment rate
+            latest_rate = county_data.loc[county_data['date'].idxmax(), 'UnemploymentRate']
+            
+            # Calculate statistics
+            min_rate = county_data['UnemploymentRate'].min()
+            max_rate = county_data['UnemploymentRate'].max()
+            
+            # Find dates for min and max
+            min_date = county_data.loc[county_data['UnemploymentRate'].idxmin(), 'date']
+            max_date = county_data.loc[county_data['UnemploymentRate'].idxmax(), 'date']
+            
+            summary_data.append({
+                'County': county,
+                'Latest Rate': f"{latest_rate:.1f}%",
+                'Minimum Rate': f"{min_rate:.1f}% ({min_date.strftime('%b %Y')})",
+                'Maximum Rate': f"{max_rate:.1f}% ({max_date.strftime('%b %Y')})"
+            })
+        
+        # Create DataFrame and display table
+        summary_df = pd.DataFrame(summary_data)
+        
+        # Sort so Bay Area appears first
+        bay_area_row = summary_df[summary_df['County'] == '9-county Bay Area']
+        other_rows = summary_df[summary_df['County'] != '9-county Bay Area'].sort_values('County')
+        summary_df = pd.concat([bay_area_row, other_rows], ignore_index=True)
+        
+        st.dataframe(
+            summary_df,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                'County': st.column_config.TextColumn('Region', width='medium'),
+                'Latest Rate (%)': st.column_config.TextColumn('Latest Rate (%)', width='small'),
+                'Minimum Rate (%)': st.column_config.TextColumn('Minimum Rate', width='medium'),
+                'Maximum Rate (%)': st.column_config.TextColumn('Maximum Rate', width='medium')
+            }
+        )
 
 
     def show_employment_comparison_chart(df):
@@ -602,7 +741,6 @@ if section == "Employment":
         """
 
         latest_date = df["date"].max()
-        st.subheader(f"Recovery from February 2020 to {latest_date.strftime('%B %Y')}")   
 
         # Get February 2020 data
         feb_2020 = df[df['date'] == '2020-02-01'].copy()
@@ -637,6 +775,7 @@ if section == "Employment":
         
         # Create the bar chart
         fig = go.Figure()
+        comparison_df['County'] = comparison_df['County'].str.replace(' County', '', regex=False)
         
         # Add February 2020 bars
         fig.add_trace(go.Bar(
@@ -647,7 +786,8 @@ if section == "Employment":
             text=comparison_df['Feb 2020'],
             texttemplate='%{text:,.0f}',
             textposition='outside',
-            hovertemplate='<b>%{x}</b><br>%{y:,.0f} residents employed<extra></extra>'
+            hovertemplate='<b>%{x}</b><br>%{y:,.0f} residents employed<extra></extra>',
+            textfont=dict(family="Avenir", size=12, color="black")
         ))
         
         # Add latest month bars
@@ -655,22 +795,42 @@ if section == "Employment":
             name=f'{comparison_df["Latest Date"].iloc[0].strftime("%b %Y")}',
             x=comparison_df['County'],
             y=comparison_df['Latest'],
-            marker_color='#203864',
+            marker_color='#eeaf30',
             text=comparison_df['Latest'],
             texttemplate='%{text:,.0f}',
             textposition='outside',
-            hovertemplate='<b>%{x}</b><br>%{y:,.0f} residents employed<extra></extra>'
+            hovertemplate='<b>%{x}</b><br>%{y:,.0f} residents employed<extra></extra>',
+            textfont=dict(family="Avenir", size=12, color="black")
         ))
         
         # Update layout
         fig.update_layout(
-            title=f"February 2020 vs {df['date'].max().strftime('%B %Y')}",
-            xaxis_title='County',
-            yaxis_title='Number of Employed Residents',
+            # title=f"February 2020 vs {df['date'].max().strftime('%B %Y')}",
+            title=dict(
+                text="Employed Residents by County<br><span style='font-size:14px; color:#666; font-family:Avenir Medium'>Comparing pre-pandemic baseline to " + latest_date.strftime('%B %Y') + "</span>",
+                x=0.5,
+                xanchor='center',
+                font=dict(family="Avenir Black", size=20)
+            ),
+            xaxis=dict(
+                title='County',
+                title_font=dict(family="Avenir Medium", size=18, color="black"),
+                tickfont=dict(family="Avenir", size=12, color="black"),
+            ),
+            yaxis=dict(
+                title='Number of Employed Residents',
+                title_font=dict(family="Avenir Medium", size=18, color="black"),
+                tickfont=dict(family="Avenir", size=12, color="black"),
+                showgrid=True,
+                gridcolor="#CCCCCC",
+                gridwidth=1,
+                griddash="dash"
+            ),
             barmode='group',
             height=600,
             showlegend=True,
-            xaxis_tickangle=0
+            xaxis_tickangle=0,
+            title_font = dict(family="Avenir Black", size=20)
         )
         
         # Format y-axis to show numbers in thousands/millions
@@ -678,9 +838,9 @@ if section == "Employment":
         
         st.plotly_chart(fig, use_container_width=True)
         st.markdown("""
-        <div style='font-size: 12px; color: #666;'>
-        <strong>Source: </strong>Local Area Unemployment Statistics (LAUS), California Open Data Portal.<br>
-        <strong>Analysis:</strong> Bay Area Council Economic Institute.<br>
+        <div style='font-size: 12px; color: #666; font-family: "Avenir Light", sans-serif;'>
+        <strong style='font-family: "Avenir Medium", sans-serif;'>Source: </strong>Local Area Unemployment Statistics (LAUS), California Open Data Portal.<br>
+        <strong style='font-family: "Avenir Medium", sans-serif;'>Analysis:</strong> Bay Area Council Economic Institute.<br>
         </div>
         """, unsafe_allow_html=True)
         
@@ -728,8 +888,7 @@ if section == "Employment":
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
 
-
-    def show_job_recovery_overall(df_state, df_bay, df_us):
+    def show_job_recovery_overall(df_state, df_bay, df_us, df_sonoma):
         """
         Visualizes overall job recovery trends since February 2020 for the Bay Area, 
         the rest of California, and the United States.
@@ -748,16 +907,24 @@ if section == "Employment":
             None. Renders a Plotly line chart and source notes in Streamlit.
         """
 
-        st.subheader("Job Recovery Since February 2020")
-
-        if df_state is not None and df_bay is not None and df_us is not None:
+        if df_state is not None and df_bay is not None and df_us is not None and df_sonoma is not None:
             # Find latest common month of data available for aesthetics
             latest_common_date = min(df_state["date"].max(), df_bay["date"].max(), df_us["date"].max())
             df_state = df_state[df_state["date"] <= latest_common_date]
             df_bay = df_bay[df_bay["date"] <= latest_common_date]
             df_us = df_us[df_us["date"] <= latest_common_date]
+            df_sonoma = df_sonoma[df_sonoma["date"] <= latest_common_date]
 
             fig = go.Figure()
+
+            fig.add_hline(
+                y=0,
+                line_dash="solid",
+                line_color="#000000",
+                line_width=1,
+                opacity=1.0
+            )
+
 
             # U.S. (gray)
             fig.add_trace(
@@ -780,38 +947,39 @@ if section == "Employment":
                     marker=dict(color="#888888", size=10),
                     text=[f"{latest_us['pct_change']:.2f}%"],
                     textposition="top center",
+                    textfont=dict(size=14, family="Avenir Black", color="black"),
                     name="United States",
                     hoverinfo="skip",
                     showlegend=False
                 )
             )
 
-            # Rest of California (teal)
-            fig.add_trace(
-                go.Scatter(
-                    x=df_state["date"],
-                    y=df_state["pct_change"],
-                    mode="lines",
-                    name="Rest of California",
-                    line=dict(color="#00aca2"),
-                    hovertemplate="Rest of California: %{y:.2f}%<extra></extra>"
-                )
-            )
+            # # Rest of California (teal)
+            # fig.add_trace(
+            #     go.Scatter(
+            #         x=df_state["date"],
+            #         y=df_state["pct_change"],
+            #         mode="lines",
+            #         name="Rest of California",
+            #         line=dict(color="#00aca2"),
+            #         hovertemplate="Rest of California: %{y:.2f}%<extra></extra>"
+            #     )
+            # )
 
-            latest_row = df_state.iloc[-1]
-            fig.add_trace(
-                go.Scatter(
-                    x=[latest_row["date"]],
-                    y=[latest_row["pct_change"]],
-                    mode="markers+text",
-                    marker=dict(color="#00aca2", size=10),
-                    text=[f"{latest_row['pct_change']:.2f}%"],
-                    textposition="top center",
-                    name="California",
-                    hoverinfo="skip",
-                    showlegend=False
-                )
-            )
+            # latest_row = df_state.iloc[-1]
+            # fig.add_trace(
+            #     go.Scatter(
+            #         x=[latest_row["date"]],
+            #         y=[latest_row["pct_change"]],
+            #         mode="markers+text",
+            #         marker=dict(color="#00aca2", size=10),
+            #         text=[f"{latest_row['pct_change']:.2f}%"],
+            #         textposition="top center",
+            #         name="California",
+            #         hoverinfo="skip",
+            #         showlegend=False
+            #     )
+            # )
 
             # Bay Area (dark blue)
             fig.add_trace(
@@ -834,11 +1002,42 @@ if section == "Employment":
                     marker=dict(color="#203864", size=10),
                     text=[f"{latest_bay['pct_change']:.2f}%"],
                     textposition="top center",
+                    textfont=dict(size=14, family="Avenir Black", color="black"),
                     name="Bay Area",
                     hoverinfo="skip",
                     showlegend=False
                 )
             )
+
+
+            # SONOMA (will delete later)
+            fig.add_trace(
+                go.Scatter(
+                    x=df_sonoma["date"],
+                    y=df_sonoma["pct_change"],
+                    mode="lines",
+                    name="Sonoma County",
+                    line=dict(color="#00aca2"),
+                    hovertemplate="Sonoma: %{y:.2f}%<extra></extra>"
+                )
+            )
+
+            latest_son = df_sonoma.iloc[-1]
+            fig.add_trace(
+                go.Scatter(
+                    x=[latest_son["date"]],
+                    y=[latest_son["pct_change"]],
+                    mode="markers+text",
+                    marker=dict(color="#00aca2", size=10),
+                    text=[f"{latest_son['pct_change']:.2f}%"],
+                    textposition="bottom center",
+                    textfont=dict(size=14, family="Avenir Black", color="black"),
+                    name="Sonoma",
+                    hoverinfo="skip",
+                    showlegend=False
+                )
+            )
+
 
             latest_date = max(df_state["date"].max(), df_bay["date"].max(), df_us["date"].max())
             buffered_latest = latest_date + timedelta(days=40)
@@ -848,41 +1047,62 @@ if section == "Employment":
             quarterly_ticks = sorted(all_dates[all_dates.dt.month.isin([1, 4, 7, 10])].unique())
 
             fig.update_layout(
-                title="Percent Change in Nonfarm Payroll Jobs Since Feb 2020",
-                xaxis_title="Date",
-                yaxis_title="% Change Since Feb 2020",
+                title=dict(
+                    text="Sonoma County Job Recovery Lags Behind the Bay Area and U.S.<br><span style='font-size:20px; color:#666; font-family:Avenir Medium'>Percent Change in Nonfarm Payroll Jobs from February 2020 to " + latest_date.strftime('%B %Y') + "</span>",
+                    x=0.5,
+                    xanchor='center',
+                    font=dict(family="Avenir Black", size=26)
+                ),
                 xaxis=dict(
+                    title='Date',
+                    title_font=dict(family="Avenir Medium", size=24, color="black"),
+                    tickfont=dict(family="Avenir", size=18, color="black"),
                     tickvals=quarterly_ticks,
                     tickformat="%b\n%Y",
                     dtick="M1",
                     tickangle=0,
-                    title_font=dict(size=20),
-                    tickfont=dict(size=10),
                     range=["2020-02-01", buffered_latest.strftime("%Y-%m-%d")]
                 ),
                 yaxis=dict(
-                    title_font=dict(size=20),
-                    tickfont=dict(size=12)
+                    title='Employment Change Since Feb 2020',
+                    ticksuffix="%",
+                    title_font=dict(family="Avenir Medium", size=21, color="black"),
+                    tickfont=dict(family="Avenir", size=18, color="black"),
+                    showgrid=True,
+                    gridcolor="#CCCCCC",
+                    gridwidth=1,
+                    griddash="dash"
                 ),
                 hovermode="x unified",
                 legend=dict(
-                    font=dict(size=20),
-                    title=None,
+                    title=dict(
+                        text="Region",  # Or any title you prefer
+                        font=dict(
+                            family="Avenir Black",  # Bold/dark font
+                            size=20,
+                            color="black"
+                        )
+                    ),
+                    font=dict(
+                        family="Avenir",
+                        size=21,
+                        color="black"
+                    ),
                     orientation="v",
-                    yanchor="top",
-                    y=1,
-                    xanchor="left",
-                    x=1
-                )
+                    x=1.01,
+                    y=1
+                ),
             )
 
             st.plotly_chart(fig, use_container_width=True)
             st.markdown("""
-            <div style='font-size: 12px; color: #666;'>
-            <strong>Source:</strong> Bureau of Labor Statistics (BLS). <strong>Note:</strong> Data are seasonally adjusted.<br>
-            <strong>Analysis:</strong> Bay Area Council Economic Institute.<br>
+            <div style='font-size: 12px; color: #666; font-family: "Avenir Light", sans-serif;'>
+            <strong style='font-family: "Avenir Medium", sans-serif;'>Source: </strong>Bureau of Labor Statistics (BLS).<br>
+            <strong style='font-family: "Avenir Medium", sans-serif;'>Note: </strong>Data are seasonally adjusted.<br>
+            <strong style='font-family: "Avenir Medium", sans-serif;'>Analysis:</strong> Bay Area Council Economic Institute.<br>
             </div>
             """, unsafe_allow_html=True)
+        
 
 
     def show_job_recovery_by_state(state_code_map, fetch_states_job_data):
@@ -1087,10 +1307,7 @@ if section == "Employment":
 
         Returns:
             None. The function directly renders the chart in Streamlit using `st.plotly_chart()`.
-        """
-        
-        st.subheader(f"Monthly Job Change in {region_name}")
-        
+        """        
         # Calculate dynamic y-axis range excluding April 2020
         df_for_range = df[df["date"] != pd.to_datetime("2020-04-01")]
         y_min = df_for_range["monthly_change"].min()
@@ -1109,26 +1326,42 @@ if section == "Employment":
             marker_color=df["color"],
             text=df["label"],
             textposition="outside",
+            textfont=dict(
+                family="Avenir Black",
+                size=15
+            ),
             name=region_name,
             hovertemplate="%{x|%B %Y}<br>Change: %{y:,.0f} Jobs<extra></extra>"
         ))
 
         quarterly_ticks = df["date"][df["date"].dt.month.isin([1, 4, 7, 10])].unique()
+        latest_month = df["date"].max().strftime('%B %Y')
 
+        
         fig.update_layout(
-            title=f"February 2020 to {df['date'].max().strftime('%B %Y')}",
-            xaxis_title="Month",
-            yaxis_title="Job Change",
-            showlegend=False,
+            title=dict(
+                text=f"Monthly Job Change in {region_name} <br>"
+                    f"<span style='font-size:20px; color:#666; font-family:Avenir Medium'>"
+                    f"February 2020 to {latest_month}</span>",
+                x=0.5,
+                xanchor='center',
+                font=dict(family="Avenir Black", size=26)
+            ),
+            # title=f"February 2020 to {df['date'].max().strftime('%B %Y')}",
             xaxis=dict(
+                title='Month',
+                title_font=dict(family="Avenir Medium", size=24, color="black"),
+                tickfont=dict(family="Avenir", size=18, color="black"),
                 tickvals=quarterly_ticks,
                 tickformat="%b\n%Y",
-                tickangle=0,
-                title_font=dict(size=20),
-                tickfont=dict(size=10)
+                tickangle=0
             ),
+            showlegend=False,
             yaxis=dict(
-                tickfont=dict(size=12),
+                title='Monthly Change in Jobs',
+                title_font=dict(family="Avenir Medium", size=24, color="black"),
+                tickfont=dict(family="Avenir", size=18, color="black"),
+                showgrid=True,
                 range=[y_axis_min, y_axis_max]
             ),
             margin=dict(t=50, b=50),
@@ -1136,10 +1369,11 @@ if section == "Employment":
 
         st.plotly_chart(fig, use_container_width=True)
         st.markdown("""
-        <div style='font-size: 12px; color: #666;'>
-        <strong>Source:</strong> Bureau of Labor Statistics (BLS). <strong>Note:</strong> Data are seasonally adjusted.<br>
-        <strong>Analysis:</strong> Bay Area Council Economic Institute.<br>
-        <strong>Regions:</strong> North Bay: Napa MSA, San Rafael MD, Santa Rosa-Petaluma, Vallejo.
+        <div style='font-size: 12px; color: #666; font-family: "Avenir Light", sans-serif;'>
+        <strong style='font-family: "Avenir Medium", sans-serif;'>Source: </strong> Bureau of Labor Statistics (BLS).<br>
+        <strong style='font-family: "Avenir Medium", sans-serif;'>Note: </strong> Data are seasonally adjusted.<br>
+        <strong style='font-family: "Avenir Medium", sans-serif;'>Analysis: </strong> Bay Area Council Economic Institute.<br>
+        <strong style='font-family: "Avenir Medium", sans-serif;'>Regions:</strong> North Bay: Napa MSA, San Rafael MD, Santa Rosa-Petaluma, Vallejo.
                     East Bay: Oakland-Fremont-Berkeley MD. South Bay: San Jose-Sunnyvale-Santa Clara, San Francisco-Peninsula: San Francisco-San Mateo-Redwood City MD<br>
         </div>
         """, unsafe_allow_html=True)
@@ -1715,6 +1949,7 @@ if section == "Employment":
         df_state = fetch_rest_of_ca_payroll_data()
         df_bay = fetch_bay_area_payroll_data()
         df_us = fetch_us_payroll_data()
+        df_sonoma = fetch_sonoma_payroll_data()
 
 
         if processed_df is not None:
@@ -1726,8 +1961,7 @@ if section == "Employment":
                 show_unemployment_rate_chart(processed_df)
 
             elif subtab == "Job Recovery":
-                show_job_recovery_overall(df_state, df_bay, df_us)
-                # st.markdown("<br><br><br>", unsafe_allow_html=True)     # Vertical spacing for aesthetics
+                show_job_recovery_overall(df_state, df_bay, df_us, df_sonoma)
                 show_job_recovery_by_state(state_code_map, fetch_states_job_data)
 
             elif subtab == "Monthly Change":
@@ -1740,6 +1974,7 @@ if section == "Employment":
                         "East Bay",
                         "San Francisco-Peninsula",
                         "South Bay",
+                        "Sonoma County"
                     ]
                 )
 

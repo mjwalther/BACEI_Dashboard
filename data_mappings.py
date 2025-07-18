@@ -8,6 +8,8 @@ regions = {
     "San Francisco-Peninsula": "SMS06418840000000001",
     # San Jose-Sunnyvale-Santa Clara
     "South Bay": "SMS06419400000000001",
+    # Sonoma County (will delete later)
+    "Sonoma County": "SMS06422200000000001"
 }
 
 # Mapping of U.S. states to BLS nonfarm payroll series IDs (seasonally adjusted)
@@ -265,4 +267,17 @@ rename_mapping = {
     "San Jose-Sunnyvale-Santa Clara, CA": "San Jose",
     "Seattle-Tacoma-Bellevue, WA": "Seattle",
     "Washington-Arlington-Alexandria, DC-VA-MD-WV": "Washington D.C."
+}
+
+color_map = {
+    '9-county Bay Area': '#203864',
+    'Alameda County': "#577CBE",
+    'Contra Costa County': "#75affc",
+    'Marin County': '#d84f19',
+    'Napa County': '#eeaf30',
+    'San Francisco County': '#7e8082',
+    'San Mateo County': "#54b1ad",
+    'Santa Clara County': "#09E6E2",
+    'Solano County': "#063b61",
+    'Sonoma County': '#00aca2'
 }
