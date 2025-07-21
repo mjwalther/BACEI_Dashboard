@@ -198,6 +198,19 @@ series_mapping = {
 }
 
 
+sonoma_mapping = {
+    'SMU06422202000000001': ('Santa Rosa-Petaluma, CA', 'Construction'),
+    'SMU06422203000000001': ('Santa Rosa-Petaluma, CA', 'Manufacturing'),
+    'SMU06422204200000001': ('Santa Rosa-Petaluma, CA', 'Retail Trade'),
+    'SMU06422205000000001': ('Santa Rosa-Petaluma, CA', 'Information'),
+    'SMU06422206000000001': ('Santa Rosa-Petaluma, CA', 'Professional and Business Services'),
+    'SMU06422209000000001': ('Santa Rosa-Petaluma, CA', 'Government'),
+    'SMU06422207000000001': ('Santa Rosa-Petaluma, CA', 'Leisure and Hospitality'),
+    'SMU06422205500000001': ('Santa Rosa-Petaluma, CA', 'Financial Activities'),
+    'SMU06422206500000001': ('Santa Rosa-Petaluma, CA', 'Education and Health Services'),
+    'SMU06422204000000001': ('Santa Rosa-Petaluma, CA', 'Trade, Transportation, and Utilities'),
+}
+
 # Mapping for BLS employment numbers in office / teach industries across major metros
 office_metros_mapping = {
     'SMU13120605000000001': ('Atlanta-Sandy Springs-Roswell, GA', 'Information'),
@@ -248,6 +261,9 @@ office_metros_mapping = {
     'SMU11479005000000001': ('Washington-Arlington-Alexandria, DC-VA-MD-WV', 'Information'),
     'SMU11479005500000001': ('Washington-Arlington-Alexandria, DC-VA-MD-WV', 'Financial Activities'),
     'SMU11479006000000001': ('Washington-Arlington-Alexandria, DC-VA-MD-WV', 'Professional and Business Services'),
+    'SMU06422205000000001': ('Santa Rosa-Petaluma, CA', 'Information'),
+    'SMU06422205500000001': ('Santa Rosa-Petaluma, CA', 'Financial Activities'),
+    'SMU06422205552000001': ('Santa Rosa-Petaluma, CA', 'Professional and Business Services')
 }
 
 rename_mapping = {
@@ -266,7 +282,8 @@ rename_mapping = {
     "San Francisco-Oakland-Fremont, CA": "San Francisco",
     "San Jose-Sunnyvale-Santa Clara, CA": "San Jose",
     "Seattle-Tacoma-Bellevue, WA": "Seattle",
-    "Washington-Arlington-Alexandria, DC-VA-MD-WV": "Washington D.C."
+    "Washington-Arlington-Alexandria, DC-VA-MD-WV": "Washington D.C.",
+    "Santa Rosa-Petaluma, CA": "Sonoma County"
 }
 
 color_map = {

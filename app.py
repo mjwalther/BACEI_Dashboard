@@ -6,7 +6,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import os
 from datetime import datetime, timedelta
-from data_mappings import state_code_map, series_mapping, bay_area_counties, regions, office_metros_mapping, rename_mapping, color_map
+from data_mappings import state_code_map, series_mapping, bay_area_counties, regions, office_metros_mapping, rename_mapping, color_map, sonoma_mapping
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -947,7 +947,7 @@ if section == "Employment":
                     marker=dict(color="#888888", size=10),
                     text=[f"{latest_us['pct_change']:.2f}%"],
                     textposition="top center",
-                    textfont=dict(size=14, family="Avenir Black", color="black"),
+                    textfont=dict(size=18, family="Avenir", color="black"),
                     name="United States",
                     hoverinfo="skip",
                     showlegend=False
@@ -1002,7 +1002,7 @@ if section == "Employment":
                     marker=dict(color="#203864", size=10),
                     text=[f"{latest_bay['pct_change']:.2f}%"],
                     textposition="top center",
-                    textfont=dict(size=14, family="Avenir Black", color="black"),
+                    textfont=dict(size=18, family="Avenir", color="black"),
                     name="Bay Area",
                     hoverinfo="skip",
                     showlegend=False
@@ -1031,7 +1031,7 @@ if section == "Employment":
                     marker=dict(color="#00aca2", size=10),
                     text=[f"{latest_son['pct_change']:.2f}%"],
                     textposition="bottom center",
-                    textfont=dict(size=14, family="Avenir Black", color="black"),
+                    textfont=dict(size=18, family="Avenir", color="black"),
                     name="Sonoma",
                     hoverinfo="skip",
                     showlegend=False
@@ -1040,15 +1040,19 @@ if section == "Employment":
 
 
             latest_date = max(df_state["date"].max(), df_bay["date"].max(), df_us["date"].max())
-            buffered_latest = latest_date + timedelta(days=40)
+            buffered_latest = latest_date + timedelta(days=50)
 
             # Generate quarterly ticks (Jan, Apr, Jul, Oct) across all dates
             all_dates = pd.concat([df_state["date"], df_bay["date"], df_us["date"]])
             quarterly_ticks = sorted(all_dates[all_dates.dt.month.isin([1, 4, 7, 10])].unique())
+            ticktext=[
+                date.strftime("%b<br> %Y") if date.month == 1 else date.strftime("%b")
+                for date in quarterly_ticks
+            ]
 
             fig.update_layout(
                 title=dict(
-                    text="Sonoma County Job Recovery Lags Behind the Bay Area and U.S.<br><span style='font-size:20px; color:#666; font-family:Avenir Medium'>Percent Change in Nonfarm Payroll Jobs from February 2020 to " + latest_date.strftime('%B %Y') + "</span>",
+                    text="Sonoma County Job Recovery Lags Behind the U.S.<br><span style='font-size:20px; color:#666; font-family:Avenir Medium'>Percent Change in Nonfarm Payroll Jobs from February 2020 to " + latest_date.strftime('%B %Y') + "</span>",
                     x=0.5,
                     xanchor='center',
                     font=dict(family="Avenir Black", size=26)
@@ -1058,7 +1062,8 @@ if section == "Employment":
                     title_font=dict(family="Avenir Medium", size=24, color="black"),
                     tickfont=dict(family="Avenir", size=18, color="black"),
                     tickvals=quarterly_ticks,
-                    tickformat="%b\n%Y",
+                    #tickformat="%b\n%Y",
+                    ticktext=ticktext,
                     dtick="M1",
                     tickangle=0,
                     range=["2020-02-01", buffered_latest.strftime("%Y-%m-%d")]
@@ -1343,6 +1348,7 @@ if section == "Employment":
                 text=f"Monthly Job Change in {region_name} <br>"
                     f"<span style='font-size:20px; color:#666; font-family:Avenir Medium'>"
                     f"February 2020 to {latest_month}</span>",
+                    #f"June 2024 to {latest_month}</span>",
                 x=0.5,
                 xanchor='center',
                 font=dict(family="Avenir Black", size=26)
@@ -1353,6 +1359,7 @@ if section == "Employment":
                 title_font=dict(family="Avenir Medium", size=24, color="black"),
                 tickfont=dict(family="Avenir", size=18, color="black"),
                 tickvals=quarterly_ticks,
+                #tickvals=df["date"],
                 tickformat="%b\n%Y",
                 tickangle=0
             ),
@@ -1581,7 +1588,8 @@ if section == "Employment":
         )
 
         # Step 1: Fetch data in chunks (BLS API has limits)
-        series_ids = list(series_mapping.keys())
+        #series_ids = list(series_mapping.keys())
+        series_ids = list(sonoma_mapping.keys())
         all_data = []
         
         # Process in chunks of 25 series (BLS API limit)
@@ -1651,7 +1659,7 @@ if section == "Employment":
         if recovery_period == "Since Feb 2020":
             baseline_date = pd.to_datetime("2020-02-01")
             baseline_label = "Feb 2020"
-            title_period = "Post-Covid Recovery"
+            title_period = "Post-Covid"
         else:  # Past-Year Recovery
             # Get the latest available date and calculate 12 months prior
             latest_date = df["date"].max()
@@ -1662,7 +1670,7 @@ if section == "Employment":
             closest_baseline = min(available_dates, key=lambda x: abs(x - baseline_date))
             baseline_date = closest_baseline
             baseline_label = baseline_date.strftime("%b %Y")
-            title_period = "Past-Year Recovery"
+            title_period = "Last 12 Months"
         
         # Get the latest available date
         latest_date = df["date"].max()
@@ -1725,26 +1733,76 @@ if section == "Employment":
             orientation='h',
             marker_color=colors,
             text=[f"{val:.1f}%" for val in pct_change.values],
+            textfont=dict(size=17, family="Avenir Light", color="black"),
             textposition="outside",
             hovertemplate=f"%{{y}}<br>% Change: %{{x:.1f}}%<br>{baseline_label}: %{{customdata[0]:,.0f}}<br>{latest_date.strftime('%b %Y')}: %{{customdata[1]:,.0f}}<extra></extra>",
             customdata=[[baseline_totals[industry], latest_totals[industry]] for industry in pct_change.index]
         ))
 
+        # Add vertical dashed lines at specified x-axis values
+        # Reconstruct the x-axis range
+        x_min = min(pct_change.min() - 5, -10)
+        x_max = max(pct_change.max() + 5, 10)
+
+        # Define tick spacing (every 5%)
+        tick_spacing = 5
+
+        # Create vertical dashed lines at every tick
+        tick_positions = list(range(int(x_min), int(x_max) + 1, tick_spacing))
+
+        for x in tick_positions:
+            fig.add_shape(
+                type="line",
+                x0=x,
+                y0=-0.5,
+                x1=x,
+                y1=len(pct_change) - 0.5,
+                line=dict(
+                    color="lightgray",
+                    width=1,
+                    dash="dash"
+                ),
+                layer="below"
+            )
+
+
         fig.update_layout(
-            title=f"{title_period}: {baseline_label} to {latest_date.strftime('%b %Y')}",
+            #title=f"{title_period}: {baseline_label} to {latest_date.strftime('%b %Y')}",
             xaxis_title=f"Percent Change Since {baseline_label}",
-            margin=dict(l=200, r=100, t=80, b=50),
+            title=dict(
+                text=f"Sonoma County Job Recovery by Industry<br>"
+                    f"<span style='font-size:20px; color:#666; font-family:Avenir Medium'>"
+                    f"{title_period}: {baseline_label} to {latest_date.strftime('%b %Y')}</span>",
+                x=0.5,
+                xanchor='center',
+                font=dict(family="Avenir Black", size=26)
+            ),
+            margin=dict(l=100, r=200, t=80, b=70),
             xaxis=dict(
                 tickformat=".0f",
                 ticksuffix="%",
+                title_font=dict(family="Avenir Medium", size=21, color="black"),
+                tickfont=dict(family="Avenir", size=18, color="black"),
                 range=[min(pct_change.min() - 5, -10), max(pct_change.max() + 5, 10)],
-                tickfont=dict(size=14),
-                title=dict(font=dict(size=15))
+                #title_standoff=25
             ),
-            yaxis=dict(tickfont=dict(size=15)),
+            yaxis=dict(
+                tickfont=dict(family="Avenir", size=18, color="black"),
+                # showticklabels=False
+            ),
             showlegend=False,
             height=600
         )
+
+        # for i, (industry, value) in enumerate(pct_change.items()):
+        #     fig.add_annotation(
+        #         x=-1 if value >= 0 else 1,  # Slight offset from 0 line
+        #         y=i,
+        #         text=industry,
+        #         showarrow=False,
+        #         xanchor="right" if value >= 0 else "left",  # Align text depending on side
+        #         font=dict(family="Avenir", size=18, color="black")
+        #     )
 
         st.plotly_chart(fig, use_container_width=True)
         st.markdown("""
@@ -1872,7 +1930,7 @@ if section == "Employment":
         # Step 5: Calculate Percent Change
         common_metros = set(baseline_totals.index) & set(latest_totals.index)
         pct_change = pd.Series({
-            metro: ((latest_totals[metro] - baseline_totals[metro]) / baseline_totals[metro]) * 100
+            metro: round(((latest_totals[metro] - baseline_totals[metro]) / baseline_totals[metro]) * 100, 1)
             for metro in common_metros if baseline_totals[metro] > 0
         }).sort_values(ascending=True)
 
@@ -1883,12 +1941,23 @@ if section == "Employment":
 
         # Step 7: Create Chart
         fig = go.Figure()
+
+        # Create custom y-axis labels with specific color for Sonoma County
+        colored_labels = []
+        for name in short_names:
+            if "Sonoma" in name:  # Adjust this condition based on your exact label
+                colored_labels.append(f'<span style="color:#d84f19">{name}</span>')
+            else:
+                colored_labels.append(name)
+
+
         fig.add_trace(go.Bar(
-            y=short_names,
+            y=colored_labels,
             x=pct_change.values,
             orientation='h',
             marker_color=colors,
             text=[f"{val:.1f}%" for val in pct_change.values],
+            textfont=dict(size=16, family="Avenir Light", color="black"),
             textposition="outside",
             hovertemplate="%{y}<br>% Change: %{x:.1f}%<br>" +
                         f"{baseline_label}: " + "%{customdata[0]:,.0f}" +
@@ -1896,16 +1965,74 @@ if section == "Employment":
             customdata=[[baseline_totals[metro], latest_totals[metro]] for metro in pct_change.index]
         ))
 
+
+        # Determine automatic tick positions by creating a temporary figure
+        temp_fig = go.Figure()
+        temp_fig.add_trace(go.Bar(y=short_names, x=pct_change.values, orientation='h'))
+        temp_fig.update_layout(xaxis=dict(tickformat=".1f", ticksuffix="%"))
+        
+        # Extract the automatic tick positions
+        tick_positions = temp_fig.layout.xaxis.tickvals
+        
+        if tick_positions is None:
+            data_range = pct_change.max() - pct_change.min()
+            if data_range <= 2:
+                tick_step = 0.5
+            elif data_range <= 5:
+                tick_step = 1
+            elif data_range <= 10:
+                tick_step = 2
+            else:
+                tick_step = 5
+            
+            x_min = pct_change.min()
+            x_max = pct_change.max()
+            start_tick = (x_min // tick_step) * tick_step
+            end_tick = ((x_max // tick_step) + 1) * tick_step
+            
+            tick_positions = []
+            current = start_tick
+            while current <= end_tick:
+                tick_positions.append(current)
+                current += tick_step
+
+        # Add vertical dashed lines at tick positions
+        for x in tick_positions:
+            fig.add_shape(
+                type="line",
+                x0=x,
+                y0=-0.5,
+                x1=x,
+                y1=len(pct_change) - 0.5,
+                line=dict(
+                    color="lightgray",
+                    width=1,
+                    dash="dash"
+                ),
+                layer="below"
+            )
+
+
         fig.update_layout(
-            title=f"Employment in Key Office Sectors by Metro Area: {title_suffix}",
-            xaxis_title=f"Percent Change Since {baseline_label}",
+            title=dict(
+                text=f"Employment in Key Office Sectors by Metro Area<br>"
+                    f"<span style='font-size:20px; color:#666; font-family:Avenir Medium'>"
+                    f"{title_suffix}</span>",
+                x=0.5,
+                xanchor='center',
+                font=dict(family="Avenir Black", size=26)
+            ),
             margin=dict(l=200, r=100, t=80, b=50),
-            xaxis=dict(tickformat=".0f",
-                       tickfont=dict(size=14),
-                       ticksuffix="%",
-                       title=dict(font=dict(size=15))
-                       ),
-            yaxis=dict(tickfont=dict(size=15)),
+            xaxis=dict(
+                title=f"Percent Change Since {baseline_label}",
+                tickformat=".1f",
+                ticksuffix="%",
+                title_font=dict(family="Avenir Medium", size=24, color="black"),
+                tickfont=dict(family="Avenir", size=18, color="black"),
+            ),
+            yaxis=dict(
+                tickfont=dict(family="Avenir Black", size=18, color="black")
+            ),
             showlegend=False,
             height=700
         )
