@@ -351,6 +351,80 @@ if section == "Employment":
             st.error(f"Failed to fetch Sonoma BLS data: {e}")
             return None
         
+    @st.cache_data(ttl=86400)
+    def fetch_napa_payroll_data():
+        """
+        NAPA COUNTY ONLY
+        """
+
+        series_ids = [
+            "SMS06349000000000001"  # Napa MSA
+        ]
+
+        payload = {
+            "seriesid": series_ids,
+            "startyear": "2020",
+            "endyear": str(datetime.now().year),
+            "registrationKey": BLS_API_KEY
+        }
+
+        try:
+            response = requests.post(
+                "https://api.bls.gov/publicAPI/v2/timeseries/data/",
+                json=payload, timeout=30
+            )
+            data = response.json()
+            if "Results" not in data or "series" not in data["Results"]:
+                st.error("BLS API error: No results returned.")
+                return None
+
+            all_series = []
+            for series in data["Results"]["series"]:
+                if not series["data"]:
+                    st.warning(f"No data found for series ID: {series['seriesID']}")
+                    continue
+                try:
+                    df = pd.DataFrame(series["data"])
+                    df = df[df["period"] != "M13"]  # Exclude annual average rows
+                    df["date"] = pd.to_datetime(df["year"] + df["periodName"], format="%Y%B", errors="coerce")
+
+                    df["value"] = pd.to_numeric(df["value"], errors="coerce") * 1000
+                    df = df[["date", "value"]].sort_values("date")
+                    all_series.append(df)
+                except Exception as e:
+                    st.warning(f"Error processing series {series['seriesID']}: {e}")
+
+            if not all_series:
+                st.error("No Napa payroll data could be processed.")
+                return None
+
+            # Merge all series on date by summing values
+            merged_df = all_series[0].copy()
+            for other_df in all_series[1:]:
+                merged_df = pd.merge(merged_df, other_df, on="date", how="outer", suffixes=("", "_x"))
+
+                # If multiple columns named 'value', sum and clean
+                value_cols = [col for col in merged_df.columns if "value" in col]
+                merged_df["value"] = merged_df[value_cols].sum(axis=1, skipna=True)
+                merged_df = merged_df[["date", "value"]]
+
+            merged_df = merged_df.sort_values("date")
+
+            # Baseline = Feb 2020
+            baseline = merged_df.loc[merged_df["date"] == "2020-02-01", "value"]
+            if baseline.empty or pd.isna(baseline.iloc[0]):
+                st.warning("No baseline value found for Sonoma (Feb 2020).")
+                return None
+
+            baseline_value = baseline.iloc[0]
+            merged_df["pct_change"] = (merged_df["value"] / baseline_value - 1) * 100
+
+            return merged_df
+
+        except Exception as e:
+            st.error(f"Failed to fetch Sonoma BLS data: {e}")
+            return None
+        
 
     @st.cache_data(ttl=86400)
     def fetch_us_payroll_data():
@@ -787,7 +861,7 @@ if section == "Employment":
             texttemplate='%{text:,.0f}',
             textposition='outside',
             hovertemplate='<b>%{x}</b><br>%{y:,.0f} residents employed<extra></extra>',
-            textfont=dict(family="Avenir", size=12, color="black")
+            textfont=dict(family="Avenir", size=13, color="black")
         ))
         
         # Add latest month bars
@@ -800,31 +874,32 @@ if section == "Employment":
             texttemplate='%{text:,.0f}',
             textposition='outside',
             hovertemplate='<b>%{x}</b><br>%{y:,.0f} residents employed<extra></extra>',
-            textfont=dict(family="Avenir", size=12, color="black")
+            textfont=dict(family="Avenir Black", size=15, color="black")
         ))
         
         # Update layout
         fig.update_layout(
-            # title=f"February 2020 vs {df['date'].max().strftime('%B %Y')}",
             title=dict(
-                text="Employed Residents by County<br><span style='font-size:14px; color:#666; font-family:Avenir Medium'>Comparing pre-pandemic baseline to " + latest_date.strftime('%B %Y') + "</span>",
+                text="<span style='font-size:26px; font-family:Avenir Black'>Employed Residents by County<br><span style='font-size:20px; color:#666; font-family:Avenir Medium'>Comparing pre-pandemic baseline to " + latest_date.strftime('%B %Y') + "</span>",
                 x=0.5,
                 xanchor='center',
-                font=dict(family="Avenir Black", size=20)
             ),
             xaxis=dict(
                 title='County',
-                title_font=dict(family="Avenir Medium", size=18, color="black"),
-                tickfont=dict(family="Avenir", size=12, color="black"),
+                title_font=dict(family="Avenir Medium", size=22, color="black"),
+                tickfont=dict(family="Avenir", size=16, color="black"),
             ),
             yaxis=dict(
                 title='Number of Employed Residents',
-                title_font=dict(family="Avenir Medium", size=18, color="black"),
-                tickfont=dict(family="Avenir", size=12, color="black"),
+                title_font=dict(family="Avenir Medium", size=22, color="black"),
+                tickfont=dict(family="Avenir", size=16, color="black"),
                 showgrid=True,
                 gridcolor="#CCCCCC",
                 gridwidth=1,
                 griddash="dash"
+            ),
+            legend=dict(
+                font=dict(family="Avenir", size=18)
             ),
             barmode='group',
             height=600,
@@ -888,7 +963,7 @@ if section == "Employment":
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
 
-    def show_job_recovery_overall(df_state, df_bay, df_us, df_sonoma):
+    def show_job_recovery_overall(df_state, df_bay, df_us, df_sonoma, df_napa):
         """
         Visualizes overall job recovery trends since February 2020 for the Bay Area, 
         the rest of California, and the United States.
@@ -907,13 +982,14 @@ if section == "Employment":
             None. Renders a Plotly line chart and source notes in Streamlit.
         """
 
-        if df_state is not None and df_bay is not None and df_us is not None and df_sonoma is not None:
+        if df_state is not None and df_bay is not None and df_us is not None and df_sonoma is not None and df_napa is not None:
             # Find latest common month of data available for aesthetics
             latest_common_date = min(df_state["date"].max(), df_bay["date"].max(), df_us["date"].max())
             df_state = df_state[df_state["date"] <= latest_common_date]
             df_bay = df_bay[df_bay["date"] <= latest_common_date]
             df_us = df_us[df_us["date"] <= latest_common_date]
             df_sonoma = df_sonoma[df_sonoma["date"] <= latest_common_date]
+            df_napa = df_napa[df_napa["date"] <= latest_common_date]
 
             fig = go.Figure()
 
@@ -1017,7 +1093,7 @@ if section == "Employment":
                     y=df_sonoma["pct_change"],
                     mode="lines",
                     name="Sonoma County",
-                    line=dict(color="#00aca2"),
+                    line=dict(color="#d84f19"),
                     hovertemplate="Sonoma: %{y:.2f}%<extra></extra>"
                 )
             )
@@ -1028,7 +1104,7 @@ if section == "Employment":
                     x=[latest_son["date"]],
                     y=[latest_son["pct_change"]],
                     mode="markers+text",
-                    marker=dict(color="#00aca2", size=10),
+                    marker=dict(color="#d84f19", size=10),
                     text=[f"{latest_son['pct_change']:.2f}%"],
                     textposition="bottom center",
                     textfont=dict(size=18, family="Avenir", color="black"),
@@ -1038,12 +1114,40 @@ if section == "Employment":
                 )
             )
 
+            # NAPA (will delete later)
+            fig.add_trace(
+                go.Scatter(
+                    x=df_napa["date"],
+                    y=df_napa["pct_change"],
+                    mode="lines",
+                    name="Napa County",
+                    line=dict(color="#00aca2"),
+                    hovertemplate="Napa: %{y:.2f}%<extra></extra>"
+                )
+            )
 
-            latest_date = max(df_state["date"].max(), df_bay["date"].max(), df_us["date"].max())
+            latest_napa = df_napa.iloc[-1]
+            fig.add_trace(
+                go.Scatter(
+                    x=[latest_napa["date"]],
+                    y=[latest_napa["pct_change"]],
+                    mode="markers+text",
+                    marker=dict(color="#00aca2", size=10),
+                    text=[f"{latest_napa['pct_change']:.2f}%"],
+                    textposition="bottom center",
+                    textfont=dict(size=18, family="Avenir", color="black"),
+                    name="Napa",
+                    hoverinfo="skip",
+                    showlegend=False
+                )
+            )
+
+
+            latest_date = max(df_state["date"].max(), df_bay["date"].max(), df_us["date"].max(), df_napa["date"].max())
             buffered_latest = latest_date + timedelta(days=50)
 
             # Generate quarterly ticks (Jan, Apr, Jul, Oct) across all dates
-            all_dates = pd.concat([df_state["date"], df_bay["date"], df_us["date"]])
+            all_dates = pd.concat([df_state["date"], df_bay["date"], df_us["date"], df_napa["date"], df_sonoma["date"]])
             quarterly_ticks = sorted(all_dates[all_dates.dt.month.isin([1, 4, 7, 10])].unique())
             ticktext=[
                 date.strftime("%b<br> %Y") if date.month == 1 else date.strftime("%b")
@@ -1052,17 +1156,15 @@ if section == "Employment":
 
             fig.update_layout(
                 title=dict(
-                    text="Sonoma County Job Recovery Lags Behind the U.S.<br><span style='font-size:20px; color:#666; font-family:Avenir Medium'>Percent Change in Nonfarm Payroll Jobs from February 2020 to " + latest_date.strftime('%B %Y') + "</span>",
+                    text="<span style='font-size:26px; font-family:Avenir Black'>Sonoma County Job Recovery Lags Behind</span><br><br><span style='font-size:20px; color:#666; font-family:Avenir Medium'>Percent Change in Nonfarm Payroll Jobs from February 2020 to " + latest_date.strftime('%B %Y') + "</span>",
                     x=0.5,
-                    xanchor='center',
-                    font=dict(family="Avenir Black", size=26)
+                    xanchor='center'
                 ),
                 xaxis=dict(
                     title='Date',
                     title_font=dict(family="Avenir Medium", size=24, color="black"),
                     tickfont=dict(family="Avenir", size=18, color="black"),
                     tickvals=quarterly_ticks,
-                    #tickformat="%b\n%Y",
                     ticktext=ticktext,
                     dtick="M1",
                     tickangle=0,
@@ -1081,7 +1183,7 @@ if section == "Employment":
                 hovermode="x unified",
                 legend=dict(
                     title=dict(
-                        text="Region",  # Or any title you prefer
+                        text="Region",
                         font=dict(
                             family="Avenir Black",  # Bold/dark font
                             size=20,
@@ -1274,7 +1376,7 @@ if section == "Employment":
                 df["date"] = pd.to_datetime(df["year"] + df["periodName"], format="%Y%B", errors="coerce")
                 df["value"] = pd.to_numeric(df["value"], errors="coerce") * 1000
                 df = df.sort_values("date")
-                df = df[df["date"] >= "2020-02-01"]
+                df = df[df["date"] >= "2020-02-01"]     # Start date of employment job data
                 df["monthly_change"] = df["value"].diff()
                 df = df.dropna(subset=["monthly_change"])
                 
@@ -1332,8 +1434,8 @@ if section == "Employment":
             text=df["label"],
             textposition="outside",
             textfont=dict(
-                family="Avenir Black",
-                size=15
+                family="Avenir",
+                size=20
             ),
             name=region_name,
             hovertemplate="%{x|%B %Y}<br>Change: %{y:,.0f} Jobs<extra></extra>"
@@ -1348,19 +1450,21 @@ if section == "Employment":
                 text=f"Monthly Job Change in {region_name} <br>"
                     f"<span style='font-size:20px; color:#666; font-family:Avenir Medium'>"
                     f"February 2020 to {latest_month}</span>",
-                    #f"June 2024 to {latest_month}</span>",
                 x=0.5,
                 xanchor='center',
                 font=dict(family="Avenir Black", size=26)
             ),
-            # title=f"February 2020 to {df['date'].max().strftime('%B %Y')}",
+            margin=dict(t=80, b=50),
             xaxis=dict(
                 title='Month',
                 title_font=dict(family="Avenir Medium", size=24, color="black"),
                 tickfont=dict(family="Avenir", size=18, color="black"),
-                tickvals=quarterly_ticks,
-                #tickvals=df["date"],
+                tickvals = quarterly_ticks,
                 tickformat="%b\n%Y",
+                ticktext = [
+                    date.strftime("%b<br>%Y") if date.month == 1 else date.strftime("%b")
+                    for date in quarterly_ticks
+                ],
                 tickangle=0
             ),
             showlegend=False,
@@ -1371,7 +1475,6 @@ if section == "Employment":
                 showgrid=True,
                 range=[y_axis_min, y_axis_max]
             ),
-            margin=dict(t=50, b=50),
         )
 
         st.plotly_chart(fig, use_container_width=True)
@@ -1588,8 +1691,8 @@ if section == "Employment":
         )
 
         # Step 1: Fetch data in chunks (BLS API has limits)
-        #series_ids = list(series_mapping.keys())
-        series_ids = list(sonoma_mapping.keys())
+        series_ids = list(series_mapping.keys())
+        # series_ids = list(sonoma_mapping.keys())
         all_data = []
         
         # Process in chunks of 25 series (BLS API limit)
@@ -1623,9 +1726,11 @@ if section == "Employment":
         records = []
         for series in all_data:
             sid = series["seriesID"]
+            # if sid not in sonoma_mapping:
             if sid not in series_mapping:
                 continue
-                
+            
+            # region, industry = sonoma_mapping[sid]
             region, industry = series_mapping[sid]
             
             for entry in series["data"]:
@@ -1713,6 +1818,11 @@ if section == "Employment":
             if baseline_totals[industry] > 0:  # Avoid division by zero
                 change = ((latest_totals[industry] - baseline_totals[industry]) / baseline_totals[industry]) * 100
                 pct_change[industry] = change
+
+        # Step 5a: Net Change
+        net_change = pd.Series(dtype=float)
+        for industry in industries_with_both:
+            net_change[industry] = latest_totals[industry] - baseline_totals[industry]
         
         if pct_change.empty:
             st.error("No industries have sufficient data for comparison")
@@ -1721,34 +1831,56 @@ if section == "Employment":
         # Sort by percent change
         pct_change = pct_change.sort_values()
         pct_change = pct_change.drop("Trade, Transportation, and Utilities", errors="ignore")
+
+        # Sort by net change
+        net_change = net_change.sort_values()
+        net_change = net_change.drop("Trade, Transportation, and Utilities", errors="ignore")
         
         # Step 6: Create colors (red for negative, teal for positive)
-        colors = ["#d1493f" if val < 0 else "#00aca2" for val in pct_change.values]
+        # colors = ["#d1493f" if val < 0 else "#00aca2" for val in pct_change.values]
+
+        # # Step 6: Create colors (red for negative, teal for positive)
+        colors = ["#d1493f" if val < 0 else "#00aca2" for val in net_change.values]
         
         # Step 7: Create the horizontal bar chart
         fig = go.Figure()
         fig.add_trace(go.Bar(
-            y=pct_change.index,
-            x=pct_change.values,
+            y=net_change.index,
+            x=net_change.values,
             orientation='h',
             marker_color=colors,
-            text=[f"{val:.1f}%" for val in pct_change.values],
+            # text=[f"{val:+,.1f}%" for val in pct_change.values],
+            text=[f"{val:+,.0f}" for val in net_change.values],
             textfont=dict(size=17, family="Avenir Light", color="black"),
             textposition="outside",
-            hovertemplate=f"%{{y}}<br>% Change: %{{x:.1f}}%<br>{baseline_label}: %{{customdata[0]:,.0f}}<br>{latest_date.strftime('%b %Y')}: %{{customdata[1]:,.0f}}<extra></extra>",
+            # hovertemplate=f"%{{y}}<br>% Change: %{{x:.1f}}%<br>{baseline_label}: %{{customdata[0]:,.0f}}<br>{latest_date.strftime('%b %Y')}: %{{customdata[1]:,.0f}}<extra></extra>",
+            hovertemplate=f"%{{y}}<br>Net Change: %{{x:.0f}}<br>{baseline_label}: %{{customdata[0]:,.0f}}<br>{latest_date.strftime('%b %Y')}: %{{customdata[1]:,.0f}}<extra></extra>",
             customdata=[[baseline_totals[industry], latest_totals[industry]] for industry in pct_change.index]
         ))
 
+        # --- NET CHANGE ---
         # Add vertical dashed lines at specified x-axis values
-        # Reconstruct the x-axis range
-        x_min = min(pct_change.min() - 5, -10)
-        x_max = max(pct_change.max() + 5, 10)
+        # Determine dynamic x-axis range
+        buffer = 0.05 * (net_change.max() - net_change.min())  # 5% padding
+        x_min = net_change.min() - buffer
+        x_max = net_change.max() + max(500, buffer)
 
-        # Define tick spacing (every 5%)
-        tick_spacing = 5
+        # Dynamically determine tick spacing
+        data_range = x_max - x_min
+        if data_range < 5000:
+            tick_spacing = 500
+        elif data_range < 20000:
+            tick_spacing = 1000
+        elif data_range < 50000:
+            tick_spacing = 2500
+        else:
+            tick_spacing = 5000
 
-        # Create vertical dashed lines at every tick
-        tick_positions = list(range(int(x_min), int(x_max) + 1, tick_spacing))
+        # Round min and max to nearest multiple of spacing
+        x_min_rounded = int(np.floor(x_min / tick_spacing) * tick_spacing)
+        x_max_rounded = int(np.ceil(x_max / tick_spacing) * tick_spacing)
+
+        tick_positions = list(range(x_min_rounded, x_max_rounded + 1, tick_spacing))
 
         for x in tick_positions:
             fig.add_shape(
@@ -1756,7 +1888,7 @@ if section == "Employment":
                 x0=x,
                 y0=-0.5,
                 x1=x,
-                y1=len(pct_change) - 0.5,
+                y1=len(net_change) - 0.5,
                 line=dict(
                     color="lightgray",
                     width=1,
@@ -1766,11 +1898,36 @@ if section == "Employment":
             )
 
 
+        # --- PERCENT CHANGE ---
+        # x_min = min(pct_change.min() - 5, -10)
+        # x_max = max(pct_change.max() + 5, 10)
+
+        # # Define tick spacing
+        # tick_spacing = 5
+
+        # # Round min and max to nearest multiple of 5
+        # x_min_rounded = int(np.floor(x_min / tick_spacing) * tick_spacing)
+        # x_max_rounded = int(np.ceil(x_max / tick_spacing) * tick_spacing)
+
+        # tick_positions = list(range(x_min_rounded, x_max_rounded + 1, tick_spacing))
+        # tick_labels = [f"{x}%" for x in tick_positions]
+
+        # for x in tick_positions:
+        #     fig.add_shape(
+        #         type="line",
+        #         x0=x,
+        #         y0=-0.5,
+        #         x1=x,
+        #         y1=len(pct_change) - 0.5,
+        #         line=dict(color="lightgray", width=1, dash="dash"),
+        #         layer="below"
+        #     )
+
+
         fig.update_layout(
-            #title=f"{title_period}: {baseline_label} to {latest_date.strftime('%b %Y')}",
-            xaxis_title=f"Percent Change Since {baseline_label}",
+            xaxis_title=f"Net Change in Jobs Since {baseline_label}",
             title=dict(
-                text=f"Sonoma County Job Recovery by Industry<br>"
+                text=f"Bay Area Job Recovery by Industry<br>"
                     f"<span style='font-size:20px; color:#666; font-family:Avenir Medium'>"
                     f"{title_period}: {baseline_label} to {latest_date.strftime('%b %Y')}</span>",
                 x=0.5,
@@ -1779,21 +1936,24 @@ if section == "Employment":
             ),
             margin=dict(l=100, r=200, t=80, b=70),
             xaxis=dict(
-                tickformat=".0f",
+                tickformat=",.0f",
                 ticksuffix="%",
                 title_font=dict(family="Avenir Medium", size=21, color="black"),
                 tickfont=dict(family="Avenir", size=18, color="black"),
-                range=[min(pct_change.min() - 5, -10), max(pct_change.max() + 5, 10)],
+                tickvals=tick_positions,
+                # ticktext=tick_labels,
+                range=[x_min_rounded, x_max_rounded],
                 #title_standoff=25
             ),
             yaxis=dict(
-                tickfont=dict(family="Avenir", size=18, color="black"),
+                tickfont=dict(family="Avenir", size=20, color="black"),
                 # showticklabels=False
             ),
             showlegend=False,
             height=600
         )
 
+        # --- Moving y-axis labels next to the horizontal bars ---
         # for i, (industry, value) in enumerate(pct_change.items()):
         #     fig.add_annotation(
         #         x=-1 if value >= 0 else 1,  # Slight offset from 0 line
@@ -2077,6 +2237,7 @@ if section == "Employment":
         df_bay = fetch_bay_area_payroll_data()
         df_us = fetch_us_payroll_data()
         df_sonoma = fetch_sonoma_payroll_data()
+        df_napa = fetch_napa_payroll_data()
 
 
         if processed_df is not None:
@@ -2088,7 +2249,7 @@ if section == "Employment":
                 show_unemployment_rate_chart(processed_df)
 
             elif subtab == "Job Recovery":
-                show_job_recovery_overall(df_state, df_bay, df_us, df_sonoma)
+                show_job_recovery_overall(df_state, df_bay, df_us, df_sonoma, df_napa)
                 show_job_recovery_by_state(state_code_map, fetch_states_job_data)
 
             elif subtab == "Monthly Change":
