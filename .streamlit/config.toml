@@ -1,0 +1,6 @@
+[theme]
+primaryColor = "#00aca2"         # navy accent
+backgroundColor = "#FFFFFF"      # white background
+secondaryBackgroundColor = "#F0F2F6"  # sidebar gray
+textColor = "#000000"            # black text
+font = "Avenir"

@@ -9,7 +9,9 @@ regions = {
     # San Jose-Sunnyvale-Santa Clara
     "South Bay": "SMS06419400000000001",
     # Sonoma County (will delete later)
-    "Sonoma County": "SMS06422200000000001"
+    "Sonoma County": "SMS06422200000000001",
+    # United States
+    "United States": "CES0000000001"
 }
 
 # Mapping of U.S. states to BLS nonfarm payroll series IDs (seasonally adjusted)
@@ -194,7 +196,21 @@ series_mapping = {
     'SMU06419404000000001': ('San Jose-Sunnyvale-Santa Clara, CA', 'Trade, Transportation, and Utilities'),
     'SMU06420344000000001': ('San Rafael, CA', 'Trade, Transportation, and Utilities'),
     'SMU06422204000000001': ('Santa Rosa-Petaluma, CA', 'Trade, Transportation, and Utilities'),
-    'SMU06467004000000001': ('Vallejo, CA', 'Trade, Transportation, and Utilities')
+    'SMU06467004000000001': ('Vallejo, CA', 'Trade, Transportation, and Utilities'),
+    'SMU06467004000000001': ('Vallejo, CA', 'Trade, Transportation, and Utilities'),
+}
+
+us_series_mapping = {
+    'CES2000000001': ('United States', 'Construction'),
+    'CES3000000001': ('United States', 'Manufacturing'),
+    'CES4200000001': ('United States', 'Retail'),
+    'CES5000000001': ('United States', 'Information'),
+    'CES5500000001': ('United States', 'Financial Activities'),
+    'CES6000000001': ('United States', 'Professional and Business Services'),
+    'CES7000000001': ('United States', 'Leisure and Hospitality'),
+    'CES9000000001': ('United States', 'Government'),
+    'CES4000000001': ('United States', 'Trade, Transportation, and Utilities'),
+    'CES6500000001': ('United States', 'Education and Health Services')
 }
 
 
@@ -260,10 +276,10 @@ office_metros_mapping = {
     'SMU53426606000000001': ('Seattle-Tacoma-Bellevue, WA', 'Professional and Business Services'),
     'SMU11479005000000001': ('Washington-Arlington-Alexandria, DC-VA-MD-WV', 'Information'),
     'SMU11479005500000001': ('Washington-Arlington-Alexandria, DC-VA-MD-WV', 'Financial Activities'),
-    'SMU11479006000000001': ('Washington-Arlington-Alexandria, DC-VA-MD-WV', 'Professional and Business Services'),
-    'SMU06422205000000001': ('Santa Rosa-Petaluma, CA', 'Information'),
-    'SMU06422205500000001': ('Santa Rosa-Petaluma, CA', 'Financial Activities'),
-    'SMU06422205552000001': ('Santa Rosa-Petaluma, CA', 'Professional and Business Services')
+    'SMU11479006000000001': ('Washington-Arlington-Alexandria, DC-VA-MD-WV', 'Professional and Business Services')
+    # 'SMU06422205000000001': ('Santa Rosa-Petaluma, CA', 'Information'),
+    # 'SMU06422205500000001': ('Santa Rosa-Petaluma, CA', 'Financial Activities'),
+    # 'SMU06422205552000001': ('Santa Rosa-Petaluma, CA', 'Professional and Business Services')
 }
 
 rename_mapping = {
