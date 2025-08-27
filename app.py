@@ -10,6 +10,7 @@ import plotly.io as pio
 import plotly.graph_objects as go
 import os
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from data_mappings import state_code_map, series_mapping, bay_area_counties, regions, office_metros_mapping, rename_mapping, color_map, sonoma_mapping, us_series_mapping
 
 BLS_API_KEY= "15060bc07890456a95aa5d0076966247"
@@ -144,20 +145,29 @@ st.set_page_config(page_title="Bay Area Dashboard", layout="wide")
 
 @st.cache_data(ttl=3600)
 def _load_version():
-    import requests
+    import requests, json
     if PREBUILT_BASE_URL:
         r = requests.get(f"{PREBUILT_BASE_URL}/data_build/version.json", timeout=10)
         r.raise_for_status()
         return r.json()
     # local fallback
-    import json
     return json.loads((PAGES_OUT / "version.json").read_text())
 
 try:
     v = _load_version()
-    st.caption(f"Last updated: {v.get('last_updated_utc','unknown')} UTC")
+    ts = v.get("last_updated_utc", "")
+    if ts:
+        # handle possible Z suffix in ISO timestamp
+        ts_clean = ts.replace("Z", "+00:00")
+        dt_utc = datetime.fromisoformat(ts_clean)
+        # Convert UTC → Pacific Time
+        dt_pt = dt_utc.astimezone(ZoneInfo("America/Los_Angeles"))
+        formatted = dt_pt.strftime("%Y-%m-%d at %H:%M %p PT")
+        st.caption(f"Last updated: {formatted}")
+    else:
+        st.caption("Last updated: unknown")
 except Exception:
-    pass
+    st.caption("Last updated: unknown")
 
 st.markdown(
     """
