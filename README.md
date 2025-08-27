@@ -1,5 +1,5 @@
-# BACEI Data Dashboard
-Data Dashboard for Bay Area Council Economic Institute
+# Economic Data Dashboard
+Data Dashboard on Bay Area's Economy
 
 
 ## How to Run Dashboard
