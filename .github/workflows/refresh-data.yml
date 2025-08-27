@@ -25,6 +25,7 @@ jobs:
         env:
           DASHBOARD_BUILD: "1"
         run: |
+          cd $GITHUB_WORKSPACE
           python scripts/build_artifacts.py
 
       - name: Commit updated artifacts to Pages folder
