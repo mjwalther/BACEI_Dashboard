@@ -11,10 +11,7 @@ import plotly.graph_objects as go
 import os
 from datetime import datetime, timedelta
 from data_mappings import state_code_map, series_mapping, bay_area_counties, regions, office_metros_mapping, rename_mapping, color_map, sonoma_mapping, us_series_mapping
-from dotenv import load_dotenv
-load_dotenv()
 
-# BLS_API_KEY = os.getenv("BLS_API_KEY")
 BLS_API_KEY= "15060bc07890456a95aa5d0076966247"
 
 # === PREBUILT ARTIFACT SUPPORT (paste near the top, after imports) ===
