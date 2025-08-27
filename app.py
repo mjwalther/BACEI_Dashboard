@@ -17,8 +17,150 @@ load_dotenv()
 # BLS_API_KEY = os.getenv("BLS_API_KEY")
 BLS_API_KEY= "15060bc07890456a95aa5d0076966247"
 
+# === PREBUILT ARTIFACT SUPPORT (paste near the top, after imports) ===
+from pathlib import Path
+import json, time
+
+PAGES_OUT = Path("docs/data_build")
+PAGES_OUT.mkdir(parents=True, exist_ok=True)
+
+# You can point to GitHub Pages URL in production if you like
+PREBUILT_BASE_URL = os.getenv(
+    "PREBUILT_BASE_URL",
+    ""  # leave blank to read local docs/data_build when developing
+)
+
+def _write_parquet(df, name: str):
+    (PAGES_OUT / f"{name}.parquet").unlink(missing_ok=True)
+    df.to_parquet(PAGES_OUT / f"{name}.parquet", index=False)
+
+def _read_parquet(name: str):
+    import pandas as pd
+    if PREBUILT_BASE_URL:
+        # load from GitHub Pages / CDN
+        return pd.read_parquet(f"{PREBUILT_BASE_URL}/data_build/{name}.parquet")
+    # local (e.g., when previewing locally)
+    return pd.read_parquet(PAGES_OUT / f"{name}.parquet")
+
+def _write_version():
+    (PAGES_OUT / "version.json").write_text(json.dumps({
+        "last_updated_unix": int(time.time()),
+        "last_updated_utc": pd.Timestamp.utcnow().isoformat()
+    }), encoding="utf-8")
+
+def build_all_tables():
+    """
+    Reuse your existing fetching/processing functions to build the exact
+    DataFrames your charts need. Add/remove as needed.
+    """
+    tables = {}
+
+    # --- Payroll datasets (your functions already exist) ---
+    try:
+        bay_df = fetch_bay_area_payroll_data()
+        if bay_df is not None:
+            _write_parquet(bay_df, "bay_area_payroll")
+            tables["bay_area_payroll"] = bay_df
+    except Exception as e:
+        st.warning(f"Build: failed bay_area_payroll: {e}")
+
+    try:
+        sonoma_df = fetch_sonoma_payroll_data()
+        if sonoma_df is not None:
+            _write_parquet(sonoma_df, "sonoma_payroll")
+            tables["sonoma_payroll"] = sonoma_df
+    except Exception as e:
+        st.warning(f"Build: failed sonoma_payroll: {e}")
+
+    try:
+        napa_df = fetch_napa_payroll_data()
+        if napa_df is not None:
+            _write_parquet(napa_df, "napa_payroll")
+            tables["napa_payroll"] = napa_df
+    except Exception as e:
+        st.warning(f"Build: failed napa_payroll: {e}")
+
+    try:
+        us_df = fetch_us_payroll_data()
+        if us_df is not None:
+            _write_parquet(us_df, "us_payroll")
+            tables["us_payroll"] = us_df
+    except Exception as e:
+        st.warning(f"Build: failed us_payroll: {e}")
+
+    # If you use state comparisons:
+    try:
+        # You already import `series_mapping` / `us_series_mapping`.
+        # If you have a dedicated mapping for states, pass that list of series IDs here.
+        state_series_ids = list(series_mapping.get("states", {}).values()) if isinstance(series_mapping.get("states", {}), dict) else []
+        if state_series_ids:
+            states_df = fetch_states_job_data(state_series_ids)
+            if states_df is not None:
+                _write_parquet(states_df, "states_jobs")
+                tables["states_jobs"] = states_df
+    except Exception as e:
+        st.warning(f"Build: failed states_jobs: {e}")
+
+    # --- Unemployment (CA Open Data) ---
+    try:
+        raw = fetch_unemployment_data()
+        if raw:
+            unemp_df = process_unemployment_data(raw)
+            if unemp_df is not None:
+                _write_parquet(unemp_df, "unemployment_ca")
+                tables["unemployment_ca"] = unemp_df
+    except Exception as e:
+        st.warning(f"Build: failed unemployment_ca: {e}")
+
+    _write_version()
+    return tables
+
+def load_prebuilt_or_fetch(name: str, fetch_fn):
+    """
+    Minimal change path:
+    - If USE_PREBUILT=1 and a prebuilt file exists, use it
+    - Otherwise call the original fetch function
+    """
+    use_prebuilt = os.getenv("USE_PREBUILT", "1") == "1"
+    if use_prebuilt:
+        try:
+            return _read_parquet(name)
+        except Exception:
+            pass  # fall through to fetching
+    return fetch_fn()
+
+# === Build mode for GitHub Actions / local cron ===
+if os.getenv("DASHBOARD_BUILD") == "1":
+    try:
+        build_all_tables()
+        print("✅ Built artifacts under docs/data_build/")
+    except Exception as e:
+        print(f"❌ Build failed: {e}")
+        raise
+    # IMPORTANT: exit early so Streamlit UI doesn't run in CI
+    import sys
+    sys.exit(0)
+# === end PREBUILT SUPPORT ===
+
 # --- Title ----
 st.set_page_config(page_title="Bay Area Dashboard", layout="wide")
+
+@st.cache_data(ttl=3600)
+def _load_version():
+    import requests
+    if PREBUILT_BASE_URL:
+        r = requests.get(f"{PREBUILT_BASE_URL}/data_build/version.json", timeout=10)
+        r.raise_for_status()
+        return r.json()
+    # local fallback
+    import json
+    return json.loads((PAGES_OUT / "version.json").read_text())
+
+try:
+    v = _load_version()
+    st.caption(f"Last updated: {v.get('last_updated_utc','unknown')} UTC")
+except Exception:
+    pass
 
 st.markdown(
     """
@@ -3223,26 +3365,33 @@ if section == "Employment":
 
     if section == "Employment":
         # Process employment / unemployment data
-        raw_data = fetch_unemployment_data()
-        processed_df = process_unemployment_data(raw_data)
+        # raw_data = fetch_unemployment_data()
+        # processed_df = process_unemployment_data(raw_data)
+        df_unemp = load_prebuilt_or_fetch(
+            "unemployment_ca",
+            lambda: process_unemployment_data(fetch_unemployment_data())
+        )
 
         # Employment data for states, Bay Area, and the United States
-        df_state = fetch_rest_of_ca_payroll_data()
-        df_bay = fetch_bay_area_payroll_data()
-        df_us = fetch_us_payroll_data()
-        df_sonoma = fetch_sonoma_payroll_data()
-        df_napa = fetch_napa_payroll_data()
+        df_states = load_prebuilt_or_fetch(
+            "states_jobs",
+            lambda: fetch_states_job_data(list(series_mapping.get("states", {}).values()))
+        )
+        df_bay = load_prebuilt_or_fetch("bay_area_payroll", fetch_bay_area_payroll_data)
+        df_us = load_prebuilt_or_fetch("us_payroll", fetch_us_payroll_data)
+        df_sonoma = load_prebuilt_or_fetch("sonoma_payroll", fetch_sonoma_payroll_data)
+        df_napa = load_prebuilt_or_fetch("napa_payroll", fetch_napa_payroll_data)
 
 
-        if processed_df is not None:
+        if df_unemp is not None:
             if subtab == "Employment":
-                show_employment_comparison_chart(processed_df)
+                show_employment_comparison_chart(df_unemp)
 
             elif subtab == "Unemployment":
-                show_unemployment_rate_chart(processed_df)
+                show_unemployment_rate_chart(df_unemp)
 
             elif subtab == "Job Recovery":
-                show_job_recovery_overall(df_state, df_bay, df_us, df_sonoma, df_napa)
+                show_job_recovery_overall(df_states, df_bay, df_us, df_sonoma, df_napa)
                 show_job_recovery_by_state(state_code_map, fetch_states_job_data)
 
             elif subtab == "Monthly Change":

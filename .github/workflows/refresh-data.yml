@@ -1,0 +1,39 @@
+name: Refresh dashboard data
+on:
+  schedule:
+    - cron: "0 * * * *" # hourly UTC
+  workflow_dispatch:
+
+jobs:
+  build-data:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          pip install -r requirements.txt
+          pip install pyarrow
+
+      - name: Build data artifacts
+        env:
+          DASHBOARD_BUILD: "1"
+        run: |
+          python scripts/build_artifacts.py
+
+      - name: Commit updated artifacts to Pages folder
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/data_build/*
+          if git commit -m "data: refresh artifacts"; then
+            git push
+          else
+            echo "No changes to commit."
+          fi
