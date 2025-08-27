@@ -48,7 +48,7 @@ subtab = None
 if section == "Employment":
     subtab = st.sidebar.radio(
         "Employment Views:",
-        ["Employment", "Unemployment", "Job Recovery", "Monthly Change", "Industry", "Office Sectors", "Jobs Ratio"],
+        ["Employment", "Unemployment", "Job Recovery", "Monthly Change", "Industry", "Office Sector", "Jobs Ratio"],
         key="employment_subtab"
     )
 
@@ -685,7 +685,7 @@ if section == "Employment":
 
         # Add February 2020 bars
         fig.add_trace(go.Bar(
-            name='Feb 2020',
+            name='February 2020',
             x=comparison_df['County'],
             y=comparison_df['Feb 2020'],
             marker_color='#00aca2',
@@ -697,7 +697,7 @@ if section == "Employment":
         
         # Add latest month bars
         fig.add_trace(go.Bar(
-            name=f'{comparison_df["Latest Date"].iloc[0].strftime("%b %Y")}',
+            name=f'{comparison_df["Latest Date"].iloc[0].strftime("%B %Y")}',
             x=comparison_df['County'],
             y=comparison_df['Latest'],
             marker_color='#eeaf30',
@@ -754,7 +754,7 @@ if section == "Employment":
                 }
         )
         st.markdown("""
-        <div style='font-size: 12px; color: #666; font-family: "Avenir Light", sans-serif;'>
+        <div style='font-size: 12px; color: #666; font-family: "Avenir", sans-serif;'>
         <strong style='font-family: "Avenir Medium", sans-serif;'>Source: </strong>Local Area Unemployment Statistics (LAUS), California Open Data Portal.<br>
         <strong style='font-family: "Avenir Medium", sans-serif;'>Analysis:</strong> Bay Area Council Economic Institute.<br>
         </div>
@@ -949,7 +949,7 @@ if section == "Employment":
         )
 
         st.markdown("""
-        <div style='font-size: 12px; color: #666; font-family: "Avenir Light", sans-serif;'>
+        <div style='font-size: 12px; color: #666; font-family: "Avenir", sans-serif;'>
         <strong style='font-family: "Avenir Medium", sans-serif;'>Source: </strong>Local Area Unemployment Statistics (LAUS), California Open Data Portal.<br>
         <strong style='font-family: "Avenir Medium", sans-serif;'>Analysis:</strong> Bay Area Council Economic Institute.<br>
         </div>
@@ -1527,7 +1527,7 @@ if section == "Employment":
                 }
             )
             st.markdown("""
-            <div style='font-size: 12px; color: #666;'>
+            <div style='font-size: 12px; color: #666; font-family: "Avenir", sans-serif;'>
             <strong>Source:</strong> Bureau of Labor Statistics (BLS). <strong>Note:</strong> Data are seasonally adjusted.<br>
             <strong>Analysis:</strong> Bay Area Council Economic Institute.<br>
             </div>
@@ -1620,9 +1620,6 @@ if section == "Employment":
         # # Custom start date
         # start_date = pd.to_datetime("2020-02-01")
 
-        # # Latest available end date
-        # df = df[df["date"] >= start_date].sort_values("date")
-
         # --- Time-frame selector ---
         with st.container():
             tf_choice = st.radio(
@@ -1655,7 +1652,7 @@ if section == "Employment":
         # --- Filter to selected window ---
         df = df[(df["date"] >= start_date) & (df["date"] <= data_last)].sort_values("date")
 
-        # # Custom end date
+        # --- Custom end date ---
         # end_date = pd.to_datetime("2025-06-01")  # Set end date to June 1, 2025
         # df = df[(df["date"] >= start_date) & (df["date"] <= end_date)].sort_values("date")
 
@@ -1670,12 +1667,29 @@ if section == "Employment":
         y_axis_min = y_min - padding
         y_axis_max = y_max + padding
 
+        def format_label(val: float) -> str:
+            neg = val < 0
+            v = abs(val)
+            if v >= 1_000_000:
+                s = f"{v/1_000_000:.1f}".rstrip("0").rstrip(".")  # 1.0M -> 1M, 1.2M -> 1.2M
+                out = f"{s}M"
+            elif v >= 1_000:
+                out = f"{v/1_000:.0f}K"                           # 2500 -> 3K (no decimals for K)
+            else:
+                out = f"{int(v)}"
+            return f"-{out}" if neg else out
+
+
+        df = df.copy()
+        df["pretty_label"] = df["monthly_change"].apply(format_label)
+
+
         fig = go.Figure()
         fig.add_trace(go.Bar(
             x=df["date"],
             y=df["monthly_change"],
             marker_color=df["color"],
-            text=df["label"],
+            text=df["pretty_label"],
             textposition="outside",
             textfont=dict(
                 family="Avenir",
@@ -1710,22 +1724,6 @@ if section == "Employment":
             uniformtext_mode="show"
         )
 
-        # # Add annotations for labels
-        # for i, row in df.iterrows():
-        #     fig.add_annotation(
-        #         x=row["date"],
-        #         y=row["monthly_change"] + (1000 if row["monthly_change"] >= 0 else -1000),  # Adjust offset as needed
-        #         text=row["label"],
-        #         showarrow=False,
-        #         font=dict(
-        #             family="Avenir",
-        #             size=17,
-        #             color="black"
-        #         ),
-        #         xanchor="center",
-        #         yanchor="bottom" if row["monthly_change"] >= 0 else "top"
-        #     )
-
         quarterly_ticks = df["date"][df["date"].dt.month.isin([1, 4, 7, 10])].unique()
         latest_month = df["date"].max().strftime('%B %Y')
 
@@ -1736,7 +1734,7 @@ if section == "Employment":
         fig.update_layout(
             title=dict(
                     text=(
-                        f"<span style='font-size:20px; font-family:Avenir Black'>Monthly Job Change in {region_name}</span><br>"
+                        f"<span style='font-size:20px; font-family:Avenir Black'>Monthly Job Changes in {region_name}</span><br>"
                         f"<span style='font-size:17px; color:#666; font-family:Avenir Medium'>{subtitle}</span>"
                     ),
                     x=0.5,
@@ -1744,8 +1742,8 @@ if section == "Employment":
             ),
             xaxis=dict(
                 title='Month',
-                title_font=dict(family="Avenir Medium", size=18, color="black"),
-                tickfont=dict(family="Avenir", size=16, color="black"),
+                title_font=dict(family="Avenir Black", size=18, color="black"),
+                tickfont=dict(family="Avenir Medium", size=16, color="black"),
                 tickvals = quarterly_ticks,
                 tickformat="%b\n%Y",
                 ticktext = [
@@ -1776,7 +1774,7 @@ if section == "Employment":
                 }
         )
         st.markdown("""
-        <div style='font-size: 12px; color: #666; font-family: "Avenir Light", sans-serif;'>
+        <div style='font-size: 12px; color: #666; font-family: "Avenir", sans-serif;'>
         <strong style='font-family: "Avenir Medium", sans-serif;'>Source: </strong> Bureau of Labor Statistics (BLS).
         <strong style='font-family: "Avenir Medium", sans-serif;'>Note: </strong> Data are seasonally adjusted.<br>
         <strong style='font-family: "Avenir Medium", sans-serif;'>Analysis: </strong> Bay Area Council Economic Institute.<br>
@@ -1966,7 +1964,7 @@ if section == "Employment":
         fig.update_layout(
             title=dict(
                     text=(
-                        f"<span style='font-size:20px; font-family:Avenir Black'>Monthly Job Change in the Bay Area</span><br>"
+                        f"<span style='font-size:20px; font-family:Avenir Black'>Monthly Job Changes in the Bay Area</span><br>"
                         f"<span style='font-size:17px; color:#666; font-family:Avenir Medium'>{subtitle}</span>"
                     ),
                     x=0.5,
@@ -1974,8 +1972,8 @@ if section == "Employment":
             ),
             xaxis=dict(
                 title="Month",
-                title_font=dict(family="Avenir Medium", size=18, color="black"),
-                tickfont=dict(family="Avenir", size=16, color="black"),
+                title_font=dict(family="Avenir Black", size=18, color="black"),
+                tickfont=dict(family="Avenir Medium", size=16, color="black"),
                 tickmode="array",
                 tickvals=quarterly_ticks,
                 tickformat="%b\n%Y",
@@ -2009,7 +2007,7 @@ if section == "Employment":
         )
 
         st.markdown("""
-        <div style='font-size: 12px; color: #666; font-family: "Avenir Light", sans-serif;'>
+        <div style='font-size: 12px; color: #666; font-family: "Avenir", sans-serif;'>
         <strong style='font-family: "Avenir Medium", sans-serif;'>Source: </strong> Bureau of Labor Statistics (BLS).
         <strong style='font-family: "Avenir Medium", sans-serif;'>Note: </strong> Data are seasonally adjusted.<br>
         <strong style='font-family: "Avenir Medium", sans-serif;'>Analysis: </strong> Bay Area Council Economic Institute.<br>
@@ -2064,26 +2062,28 @@ if section == "Employment":
             key="industry_region_select"
         )
 
-        recovery_period = st.radio(
-            "Select Recovery Period:",
-            ["Last 12 Months", "Since COVID-19"],
-            horizontal=True,
-            key="industry_period_select"
-        )
+        col1, col2 = st.columns([1, 1])
 
-        # NEW: Metric toggle
-        metric_choice = st.radio(
-            "Metric:",
-            ["Net Change", "Percent Change"],
-            horizontal=True,
-            key="industry_metric_select"
-        )
+        with col1:
+            recovery_period = st.radio(
+                "Select Recovery Period:",
+                ["Last 12 Months", "Since COVID-19"],
+                horizontal=True,
+                key="industry_period_select"
+            )
+        with col2:
+            metric_choice = st.radio(
+                "Metric:",
+                ["Net Change", "Percent Change"],
+                horizontal=True,
+                key="industry_metric_select"
+            )
 
         # Pick mapping based on region
         selected_mapping = bay_area_series_mapping if region_choice == "Bay Area" else us_series_mapping
         title_region = "Bay Area" if region_choice == "Bay Area" else "United States"
 
-        # --- BLS fetch (unchanged) ---
+        # --- BLS fetch ---
         series_ids = list(selected_mapping.keys())
         all_data = []
         for i in range(0, len(series_ids), 25):
@@ -2146,7 +2146,7 @@ if section == "Employment":
         # --- Baseline & latest dates ---
         if recovery_period == "Since COVID-19":
             baseline_date = pd.to_datetime("2020-02-01")
-            baseline_label = "Feb 2020"
+            baseline_label = "February 2020"
             title_period = "Post-Covid"
         else:
             latest_date = df["date"].max()
@@ -2198,7 +2198,7 @@ if section == "Employment":
         for industry in industries_with_both:
             net_change[industry] = latest_totals[industry] - baseline_totals[industry]
 
-        # Drop TTU (as per your prior code)
+        # Drop TTU
         pct_change = pct_change.sort_values().drop("Trade, Transportation, and Utilities", errors="ignore")
         net_change = net_change.sort_values().drop("Trade, Transportation, and Utilities", errors="ignore")
 
@@ -2223,9 +2223,9 @@ if section == "Employment":
             label_formatter = lambda v: f"{v:+.1f}%"
             tick_value_formatter = lambda x: f"{x:.0f}%"
             is_percent_axis = True
-            hover_value_fmt = ".1f"  # percent with one decimal
+            hover_value_fmt = ":.1f"  # percent with one decimal
 
-       # --- Dynamic ticks with extra room on BOTH sides for outside labels ---
+       # --- Dynamic ticks with extra room on both sides for outside labels ---
         def nice_step(data_range, target_ticks=8):
             if data_range <= 0:
                 return 1
@@ -2243,21 +2243,30 @@ if section == "Employment":
         if rng <= 0:
             rng = 1.0 if is_percent_axis else 1000.0
 
-        # Symmetric padding so labels on both ends have room
-        pad_pct = 0.22 if not is_percent_axis else 0.15
-        left_pad  = pad_pct * rng
-        right_pad = pad_pct * rng
+        max_abs = max(abs(vmin), abs(vmax))
 
-        # Ensure a minimum absolute padding (helps when rng is small)
-        min_pad = 2 if is_percent_axis else 100000   # ~2pp for %; ~100k for net counts
-        left_pad  = max(left_pad,  min_pad)
-        right_pad = max(right_pad, min_pad)
+        # Base padding
+        pad_pct = 0.18 if not is_percent_axis else 0.12
+
+        # Optional: tighter padding specifically for Bay Area net-change
+        if title_region == "Bay Area" and not is_percent_axis:
+            pad_pct = 0.12
+
+        if is_percent_axis:
+            min_pad = 2  # percentage points
+        else:
+            # Scale-aware floor: ~4% of magnitude with a small floor and a sane cap
+            min_pad = max(0.04 * max_abs, 1500)
+            min_pad = min(min_pad, 75000)
+
+        left_pad  = max(pad_pct * rng, min_pad)
+        right_pad = max(pad_pct * rng, min_pad)
 
         x_min = vmin - left_pad
         x_max = vmax + right_pad
 
         # Nice tick step & rounded bounds
-        step = nice_step(x_max - x_min, target_ticks=7 if not is_percent_axis else 6)
+        step = nice_step(x_max - x_min, target_ticks=6 if is_percent_axis else 7)
         x_min_rounded = np.floor(x_min / step) * step
         x_max_rounded = np.ceil(x_max / step) * step
 
@@ -2281,14 +2290,13 @@ if section == "Employment":
             orientation='h',
             marker_color=colors,
             text=[label_formatter(v) for v in selected.loc[order].values],
-            textfont=dict(size=30, family="Avenir Light", color="black"),
+            textfont=dict(size=20, family="Avenir Light", color="black"),
             textposition="outside",
             hovertemplate=(
                 f"%{{y}}<br>{metric_choice}: %{{x{hover_value_fmt}}}"
                 f"<br>{baseline_label}: %{{customdata[0]:,.0f}}"
                 f"<br>{latest_date.strftime('%b %Y')}: %{{customdata[1]:,.0f}}<extra></extra>"
             ),
-            # IMPORTANT: customdata aligned to the same order as bars
             customdata=[[baseline_totals[ind], latest_totals[ind]] for ind in order]
         ))
 
@@ -2323,7 +2331,7 @@ if section == "Employment":
                 ticktext=tick_labels,
                 range=[x_min_rounded, x_max_rounded],
                 title_font=dict(family="Avenir Medium", size=21, color="black"),
-                tickfont=dict(family="Avenir", size=15, color="black"),
+                tickfont=dict(family="Avenir", size=16, color="black"),
             ),
             yaxis=dict(
                 tickfont=dict(family="Avenir", size=20, color="black"),
@@ -2348,16 +2356,14 @@ if section == "Employment":
                 }
             }
         )
-
         st.markdown(f"""
-        <div style='font-size: 12px; color: #666;'>
+        <div style='font-size: 12px; color: #666; font-family: "Avenir", sans-serif;'>
         <strong>Source:</strong> Bureau of Labor Statistics (BLS). <strong>Note:</strong> Total Non-Farm Employment data is seasonally adjusted, while other industries are not seasonally adjusted.<br>
         <strong>Analysis:</strong> Bay Area Council Economic Institute.<br>
-        <strong>Region:</strong> {title_region}
         </div>
         """, unsafe_allow_html=True)
 
-        # --- Summary table (unchanged) ---
+        # --- Summary table ---
         st.subheader("Summary")
         summary_df = pd.DataFrame({
             'Industry': order,
@@ -2397,16 +2403,28 @@ if section == "Employment":
 
         st.subheader("Office Sector Job Recovery by Metro Area")
 
-        recovery_period = st.radio(
-            "Select Recovery Period:",
-            ["Since Feb 2020", "Last 12 Months", "May 2023 to May 2025"],
-            horizontal=True
-        )
+        with st.container():
+            c1, c2 = st.columns([1, 1])
+            with c1:
+                tf_choice = st.radio(
+                    label="Select Time Frame:",
+                    options=["6 Months", "12 Months", "18 Months", "24 Months", "36 Months", "Since COVID-19"],
+                    index=5,
+                    horizontal=True,
+                    key="office_timeframe_select"
+                )
+            with c2:
+                metric_choice = st.radio(
+                    "Metric:",
+                    ["Percent Change", "Net Change"],   # default to Percent like your current chart
+                    index=0,
+                    horizontal=True,
+                    key="office_metric_select"
+                )
 
-        # Step 1: Fetch Data
+        # --- Step 1: Fetch BLS data ---
         series_ids = list(office_metros_mapping.keys())
         all_data = []
-
         for i in range(0, len(series_ids), 25):
             chunk = series_ids[i:i+25]
             payload = {
@@ -2415,183 +2433,209 @@ if section == "Employment":
                 "endyear": str(datetime.now().year),
                 "registrationKey": BLS_API_KEY
             }
-            response = requests.post("https://api.bls.gov/publicAPI/v2/timeseries/data/", json=payload, timeout=30)
-            data = response.json()
+            try:
+                response = requests.post(
+                    "https://api.bls.gov/publicAPI/v2/timeseries/data/",
+                    json=payload, timeout=30
+                )
+                data = response.json()
+                if "Results" in data and "series" in data["Results"]:
+                    all_data.extend(data["Results"]["series"])
+                else:
+                    st.warning(f"No data returned for chunk {i//25 + 1}")
+            except Exception as e:
+                st.error(f"Error fetching chunk {i//25 + 1}: {e}")
 
-            if "Results" in data and "series" in data["Results"]:
-                all_data.extend(data["Results"]["series"])
-            else:
-                st.warning(f"No data returned for chunk {i//25 + 1}")
-
-        # Step 2: Parse Data
+        # --- Step 2: Parse ---
         records = []
         for series in all_data:
             sid = series["seriesID"]
             if sid not in office_metros_mapping:
                 continue
-
             metro, sector = office_metros_mapping[sid]
-
             for entry in series["data"]:
                 if entry["period"] == "M13":
                     continue
-
                 try:
                     date = pd.to_datetime(entry["year"] + entry["periodName"], format="%Y%B", errors="coerce")
                     value = float(entry["value"].replace(",", "")) * 1000
-                    records.append({
-                        "metro": metro,
-                        "sector": sector,
-                        "date": date,
-                        "value": value
-                    })
-                except:
+                    records.append({"metro": metro, "sector": sector, "date": date, "value": value})
+                except Exception:
                     continue
 
         df = pd.DataFrame(records)
+        if df.empty:
+            st.error("No valid data records could be processed.")
+            return
 
-        # Step 3: Define baseline and latest dates
-        latest_date = df["date"].max()
-
-        if recovery_period == "Since Feb 2020":
-            baseline_date = pd.to_datetime("2020-02-01")
-            baseline_label = "Feb 2020"
-            title_suffix = f"Feb 2020 to {latest_date.strftime('%b %Y')}"
-        elif recovery_period == "May 2023 to May 2025":
-            baseline_date = pd.to_datetime("2023-05-01")
-            baseline_label = "May 2023"
-            may_2025 = pd.to_datetime("2025-05-01")
-            if may_2025 in df["date"].values:
-                latest_date = may_2025
-            else:
-                # fallback to most recent available <= May 2025
-                latest_date = df.loc[df["date"] <= may_2025, "date"].max()
-            
-            title_suffix = f"{baseline_label} to {latest_date.strftime('%b %Y')}"
+        # --- Step 3: Define baseline and latest dates (same logic as monthly chart) ---
+        data_last = pd.to_datetime(df["date"].max()).to_period("M").to_timestamp()
+        months_map = {"6 Months": 6, "12 Months": 12, "18 Months": 18, "24 Months": 24, "36 Months": 36}
+        if tf_choice == "Since COVID-19":
+            baseline_target = pd.to_datetime("2020-02-01")
         else:
-            baseline_date = latest_date - pd.DateOffset(months=12)
-            available_dates = df["date"].unique()
-            baseline_date = min(available_dates, key=lambda x: abs(x - baseline_date))
-            baseline_label = baseline_date.strftime("%b %Y")
-            title_suffix = f"{baseline_label} to {latest_date.strftime('%b %Y')}"
+            n_months = months_map[tf_choice]
+            baseline_target = (data_last - pd.DateOffset(months=n_months - 1)).to_period("M").to_timestamp()
 
-        # Step 4: Aggregate Office/Tech sectors per metro
+        available_dates = df["date"].unique()
+        baseline_date = min(available_dates, key=lambda x: abs(x - baseline_target))
+        latest_date = data_last
+        baseline_label = pd.to_datetime(baseline_date).strftime("%B %Y")
+        title_suffix = f"{baseline_label} to {latest_date.strftime('%B %Y')}"
+
+        # --- Step 4: Aggregate Office/Tech totals per metro ---
         office_sectors = ["Information", "Financial Activities", "Professional and Business Services"]
-
         baseline_df = df[(df["date"] == baseline_date) & (df["sector"].isin(office_sectors))]
-        latest_df = df[(df["date"] == latest_date) & (df["sector"].isin(office_sectors))]
+        latest_df   = df[(df["date"] == latest_date) & (df["sector"].isin(office_sectors))]
 
         baseline_totals = baseline_df.groupby("metro")["value"].sum()
-        latest_totals = latest_df.groupby("metro")["value"].sum()
+        latest_totals   = latest_df.groupby("metro")["value"].sum()
 
-        # Step 5: Calculate Percent Change
-        common_metros = set(baseline_totals.index) & set(latest_totals.index)
-        pct_change = pd.Series({
-            metro: round(((latest_totals[metro] - baseline_totals[metro]) / baseline_totals[metro]) * 100, 1)
-            for metro in common_metros if baseline_totals[metro] > 0
-        }).sort_values(ascending=True)
+        # Common metros in both periods
+        common_metros = list(set(baseline_totals.index) & set(latest_totals.index))
+        if not common_metros:
+            st.error("No metros have data for both selected periods.")
+            return
 
-        short_names = [rename_mapping.get(metro, metro) for metro in pct_change.index]
+        # Build both metrics
+        pct_change = pd.Series(
+            {m: ((latest_totals[m] - baseline_totals[m]) / baseline_totals[m] * 100.0)
+            for m in common_metros if baseline_totals[m] > 0},
+            dtype=float
+        ).sort_values(ascending=True)
 
-        # Step 6: Red for negative, Green for positive
-        #colors = ["#d1493f" if val < 0 else "#00aca2" for val in pct_change.values]
-        
-        colors = []
-        for metro in pct_change.index:
-            if metro in ["San Jose-Sunnyvale-Santa Clara, CA", "San Francisco-Oakland-Fremont, CA"]:
-                colors.append("#eeaf30")  # gold
-            else:
-                colors.append("#00aca2")  # teal
+        net_change = pd.Series(
+            {m: (latest_totals[m] - baseline_totals[m]) for m in common_metros},
+            dtype=float
+        ).sort_values(ascending=True)
 
-        # Step 7: Create Chart
-        fig = go.Figure()
+        # Short names for y-axis labels (stable regardless of metric order)
+        short_name_map = {m: rename_mapping.get(m, m) for m in common_metros}
 
-        # Create custom y-axis labels with specific color for Sonoma County
+        # --- Choose metric for plotting ---
+        if metric_choice == "Net Change":
+            selected = net_change
+            xaxis_title = "Net Change in Jobs"
+            label_formatter = lambda v: f"{v:+,.0f}"
+            is_percent_axis = False
+            hover_value_fmt = ":,.0f"
+        else:
+            selected = pct_change
+            xaxis_title = "Percent Change"
+            label_formatter = lambda v: f"{v:+.1f}%"
+            is_percent_axis = True
+            hover_value_fmt = ":.1f"
+
+        if selected.empty:
+            st.warning(f"No data available for {metric_choice.lower()} with the selected time frame.")
+            return
+
+        # Preserve sorted order
+        order = selected.index.tolist()
+
+        # Colors: highlight Bay Area metros in gold; otherwise teal
+        highlight = {
+            "San Jose-Sunnyvale-Santa Clara, CA",
+            "San Francisco-Oakland-Fremont, CA"
+        }
+        colors = ["#eeaf30" if m in highlight else "#00aca2" for m in order]
+
+        # Y labels (optionally color Sonoma if present in short name)
         colored_labels = []
-        for name in short_names:
-            if "Sonoma" in name:  # Adjust this condition based on your exact label
+        for m in order:
+            name = short_name_map[m]
+            if "Sonoma" in name:
                 colored_labels.append(f'<span style="color:#d84f19">{name}</span>')
             else:
                 colored_labels.append(name)
 
+        # --- Axis: dynamic ticks and padding (scale-aware) ---
+        def nice_step(data_range, target_ticks=8):
+            if data_range <= 0:
+                return 1
+            ideal = data_range / max(1, target_ticks)
+            power = 10 ** np.floor(np.log10(ideal))
+            for mult in (1, 2, 2.5, 5, 10):
+                step = mult * power
+                if step >= ideal:
+                    return step
+            return 10 * power
 
+        vmin, vmax = float(selected.min()), float(selected.max())
+        rng = vmax - vmin
+        if rng <= 0:
+            rng = 1.0 if is_percent_axis else 1000.0
+        max_abs = max(abs(vmin), abs(vmax))
+
+        pad_pct = 0.12 if is_percent_axis else 0.18
+        if not is_percent_axis:
+            # Scale-aware floor for net change
+            min_pad = max(0.04 * max_abs, 1500)
+            min_pad = min(min_pad, 75000)
+        else:
+            min_pad = 2  # percentage points
+
+        left_pad  = max(pad_pct * rng, min_pad)
+        right_pad = max(pad_pct * rng, min_pad)
+
+        x_min = vmin - left_pad
+        x_max = vmax + right_pad
+
+        step = nice_step(x_max - x_min, target_ticks=6 if is_percent_axis else 7)
+        x_min_rounded = np.floor(x_min / step) * step
+        x_max_rounded = np.ceil(x_max / step) * step
+
+        tick_positions = np.arange(x_min_rounded, x_max_rounded + 0.5 * step, step)
+        tick_labels = (
+            [f"{x:.0f}%" for x in tick_positions] if is_percent_axis
+            else [f"{int(round(x)):,}" for x in tick_positions]
+        )
+
+        # --- Chart ---
+        fig = go.Figure()
         fig.add_trace(go.Bar(
             y=colored_labels,
-            x=pct_change.values,
+            x=[selected[m] for m in order],
             orientation='h',
             marker_color=colors,
-            text=[f"{val:.1f}%" for val in pct_change.values],
+            text=[label_formatter(selected[m]) for m in order],
             textfont=dict(size=16, family="Avenir Light", color="black"),
             textposition="outside",
-            hovertemplate="%{y}<br>% Change: %{x:.1f}%<br>" +
-                        f"{baseline_label}: " + "%{customdata[0]:,.0f}" +
-                        f"<br>{latest_date.strftime('%b %Y')}: " + "%{customdata[1]:,.0f}<extra></extra>",
-            customdata=[[baseline_totals[metro], latest_totals[metro]] for metro in pct_change.index]
+            hovertemplate=(
+                f"%{{y}}<br>{metric_choice}: %{{x{hover_value_fmt}}}"
+                f"<br>{baseline_label}: %{{customdata[0]:,.0f}}"
+                f"<br>{latest_date.strftime('%B %Y')}: %{{customdata[1]:,.0f}}<extra></extra>"
+            ),
+            customdata=[[baseline_totals[m], latest_totals[m]] for m in order]
         ))
 
-
-        # Determine automatic tick positions by creating a temporary figure
-        temp_fig = go.Figure()
-        temp_fig.add_trace(go.Bar(y=short_names, x=pct_change.values, orientation='h'))
-        temp_fig.update_layout(xaxis=dict(tickformat=".1f", ticksuffix="%"))
-        
-        # Extract the automatic tick positions
-        tick_positions = temp_fig.layout.xaxis.tickvals
-        
-        if tick_positions is None:
-            data_range = pct_change.max() - pct_change.min()
-            if data_range <= 2:
-                tick_step = 0.5
-            elif data_range <= 5:
-                tick_step = 1
-            elif data_range <= 10:
-                tick_step = 2
-            else:
-                tick_step = 5
-            
-            x_min = pct_change.min()
-            x_max = pct_change.max()
-            start_tick = (x_min // tick_step) * tick_step
-            end_tick = ((x_max // tick_step) + 1) * tick_step
-            
-            tick_positions = []
-            current = start_tick
-            while current <= end_tick:
-                tick_positions.append(current)
-                current += tick_step
-
-        # Add vertical dashed lines at tick positions
+        # Dashed grid lines at ticks
         for x in tick_positions:
             fig.add_shape(
                 type="line",
-                x0=x,
-                y0=-0.5,
-                x1=x,
-                y1=len(pct_change) - 0.5,
-                line=dict(
-                    color="lightgray",
-                    width=1,
-                    dash="dash"
-                ),
+                x0=x, y0=-0.5, x1=x, y1=len(order) - 0.5,
+                line=dict(color="lightgray", width=1, dash="dash"),
                 layer="below"
             )
 
-
         fig.update_layout(
             title=dict(
-                text=f"Employment in Key Office Sectors by Metro Area<br>"
-                    f"<span style='font-size:20px; color:#666; font-family:Avenir Medium'>"
-                    f"{title_suffix}</span>",
-                x=0.5,
-                xanchor='center',
+                text=(
+                    "Employment in Key Office Sectors by Metro Area<br>"
+                    f"<span style='font-size:20px; color:#666; font-family:Avenir Medium'>{title_suffix}</span>"
+                ),
+                x=0.5, xanchor='center',
                 font=dict(family="Avenir Black", size=26)
             ),
-            margin=dict(l=200, r=100, t=80, b=50),
+            margin=dict(l=200, r=110, t=80, b=50),
             xaxis=dict(
-                # title=f"Percent Change Since {baseline_label}",
-                title=f"Percent Change",
-                tickformat=".1f",
-                ticksuffix="%",
+                title=xaxis_title,
+                tickmode="array",
+                tickvals=tick_positions,
+                ticktext=tick_labels,
+                range=[x_min_rounded, x_max_rounded],
+                tickformat=".1f" if is_percent_axis else ",.0f",
+                ticksuffix="%" if is_percent_axis else "",
                 title_font=dict(family="Avenir Medium", size=25, color="black"),
                 tickfont=dict(family="Avenir", size=18, color="black"),
             ),
@@ -2602,22 +2646,27 @@ if section == "Employment":
             height=700
         )
 
+        fig.update_traces(textposition="outside", cliponaxis=False)
+
         st.plotly_chart(fig, use_container_width=True)
         st.markdown("""
-            <div style='font-size: 12px; color: #666;'>
-            <strong>Source:</strong> Bureau of Labor Statistics (BLS). <strong>Note:</strong> Data are not seasonally adjusted. Knowledge industries include: Information, Financial Activities, and Professional and Business Services.<br>
-            <strong>Analysis:</strong> Bay Area Council Economic Institute.<br>
+            <div style='font-size: 12px; color: #666; font-family: "Avenir", sans-serif;'>
+            <strong>Source:</strong> Bureau of Labor Statistics (BLS).
+            <strong>Note:</strong> Data are not seasonally adjusted. Sectors include Information, Financial Activities, and Professional &amp; Business Services.<br>
+            <strong>Analysis:</strong> Bay Area Council Economic Institute.
             </div>
             """, unsafe_allow_html=True)
 
-        # Step 8: Summary Table
+        # --- Summary table ---
         st.subheader("Summary")
+        pct_for_summary = [f"{(pct_change.get(m, np.nan)):+.1f}%" for m in order]
+        net_for_summary = [f"{(latest_totals[m] - baseline_totals[m]):+,.0f}" for m in order]
         summary_df = pd.DataFrame({
-            'Metro': short_names,
-            f'{baseline_label} Jobs': [f"{baseline_totals[metro]:,.0f}" for metro in pct_change.index],
-            f'{latest_date.strftime("%b %Y")} Jobs': [f"{latest_totals[metro]:,.0f}" for metro in pct_change.index],
-            'Net Change': [f"{latest_totals[metro] - baseline_totals[metro]:+,.0f}" for metro in pct_change.index],
-            'Percent Change': [f"{val:+.1f}%" for val in pct_change.values]
+            'Metro': [short_name_map[m] for m in order],
+            f'{baseline_label} Jobs': [f"{baseline_totals[m]:,.0f}" for m in order],
+            f'{latest_date.strftime("%B %Y")} Jobs': [f"{latest_totals[m]:,.0f}" for m in order],
+            'Net Change': net_for_summary,
+            'Percent Change': pct_for_summary,
         })
 
         def color_percent(val):
@@ -2625,7 +2674,7 @@ if section == "Employment":
                 return 'color: red'
             else:
                 return 'color: green'
-        
+
         styled_summary = summary_df.style.map(color_percent, subset=['Percent Change'])
         st.dataframe(styled_summary, use_container_width=True, hide_index=True)
 
@@ -2841,9 +2890,9 @@ if section == "Employment":
         individual_areas = [
             "San Francisco-San Mateo-Redwood City MD",
             "San Jose-Sunnyvale-Santa Clara MSA", 
-            "Oakland-Fremont-Berkeley MD",
-            "Napa MSA",
-            "Santa Rosa-Petaluma MSA"
+            "Oakland-Fremont-Berkeley MD"
+            # "Napa MSA",
+            # "Santa Rosa-Petaluma MSA"
         ]
         
         # All Bay Area regions for total calculation
@@ -2912,25 +2961,25 @@ if section == "Employment":
             else:
                 st.warning(f"Missing data for {area}")
         
-        # Special handling for Sonoma County 2015 data
-        sonoma_area = "Santa Rosa-Petaluma MSA"
-        laus_2015_emp = laus_2015_month[laus_2015_month["Area Name"] == sonoma_area]["Employment"]
-        bls_2015_emp = bls_2015[bls_2015["Area Name"] == sonoma_area]["Employment"]
+        # # Special handling for Sonoma County 2015 data
+        # sonoma_area = "Santa Rosa-Petaluma MSA"
+        # laus_2015_emp = laus_2015_month[laus_2015_month["Area Name"] == sonoma_area]["Employment"]
+        # bls_2015_emp = bls_2015[bls_2015["Area Name"] == sonoma_area]["Employment"]
         
-        if not laus_2015_emp.empty and not bls_2015_emp.empty:
-            laus_2015_value = laus_2015_emp.iloc[0]
-            if laus_2015_value > 0:
-                ratio_2015 = bls_2015_emp.iloc[0] / laus_2015_value
+        # if not laus_2015_emp.empty and not bls_2015_emp.empty:
+        #     laus_2015_value = laus_2015_emp.iloc[0]
+        #     if laus_2015_value > 0:
+        #         ratio_2015 = bls_2015_emp.iloc[0] / laus_2015_value
                 
-                results.append({
-                    "Region": "Sonoma County",
-                    "Period": "2015",
-                    "Ratio": ratio_2015,
-                    "BLS_Employment": bls_2015_emp.iloc[0],
-                    "LAUS_Employment": laus_2015_value
-                })
-        else:
-            st.warning("No 2015 data available for Sonoma County")
+        #         results.append({
+        #             "Region": "Sonoma County",
+        #             "Period": "2015",
+        #             "Ratio": ratio_2015,
+        #             "BLS_Employment": bls_2015_emp.iloc[0],
+        #             "LAUS_Employment": laus_2015_value
+        #         })
+        # else:
+        #     st.warning("No 2015 data available for Sonoma County")
         
         # Now calculate Bay Area Total (2019 and latest year only)
         # Sum BLS employment for all Bay Area regions
@@ -2978,7 +3027,7 @@ if section == "Employment":
         regions = list(ratio_df["Region"].unique())
         
         # Updated colors for three periods
-        colors = ["#203864", "#00aca2", "#eeaf30"]  # Brown for 2015, teal for 2019, yellow for latest
+        colors =  ["#00aca2", "#eeaf30", "#203864"]
         
         # Calculate bar width and offsets for better centering
         bar_width = 0.25
@@ -3032,7 +3081,7 @@ if section == "Employment":
                     marker_color=colors[i % len(colors)],
                     text=[f"{val:.2f}" for val in y_values],
                     textposition="outside",
-                    textfont=dict(size=30, family="Avenir", color="black"),
+                    textfont=dict(size=25, family="Avenir", color="black"),
                     hovertemplate=f"<b>%{{customdata[2]}}</b><br>{period}: %{{y:.3f}}<br>" +
                                 "CES Employment: %{customdata[0]:,.0f}<br>" +
                                 "LAUS Employment: %{customdata[1]:,.0f}<extra></extra>",
@@ -3052,7 +3101,7 @@ if section == "Employment":
             xaxis=dict(
                 title="Metro Area",
                 title_font=dict(family="Avenir Medium", size=20, color="black"),
-                tickfont=dict(family="Avenir", size=35, color="black"),
+                tickfont=dict(family="Avenir", size=20, color="black"),
                 tickangle=0,
                 tickmode='array',
                 tickvals=list(range(len(regions))),
@@ -3061,7 +3110,7 @@ if section == "Employment":
             yaxis=dict(
                 title="Employment Ratio",
                 title_font=dict(family="Avenir Medium", size=20, color="black"),
-                tickfont=dict(family="Avenir", size=30, color="black"),
+                tickfont=dict(family="Avenir", size=20, color="black"),
                 showgrid=True,
                 gridcolor="#CCCCCC",
                 gridwidth=1,
@@ -3095,14 +3144,14 @@ if section == "Employment":
                     "toImageButtonOptions": {
                         "format": "png",   # or 'svg'
                         "filename": "job_ratio",
-                        "scale": 3          # higher scale = higher DPI
+                        "scale": 5          # higher scale = higher DPI
                     }
                 }
             )
 
         # Add explanation and sources
         st.markdown("""
-        <div style='font-size: 12px; color: #666; font-family: "Avenir Light", sans-serif;'>
+        <div style='font-size: 12px; color: #666; font-family: "Avenir", sans-serif;'>
         <strong style='font-family: "Avenir Medium", sans-serif;'>Source: </strong>Bureau of Labor Statistics (BLS) and Local Area Unemployment Statistics (LAUS), California Open Data Portal.<br>
         <strong style='font-family: "Avenir Medium", sans-serif;'>Note: </strong>BLS data are seasonally adjusted nonfarm payroll jobs. LAUS data are total employment including farm jobs and self-employed. Each ratio uses the respective year's LAUS data as denominator. Bay Area Total includes all 7 metro divisions/MSAs. Sonoma County 2015 data shown for historical comparison.<br>
         <strong style='font-family: "Avenir Medium", sans-serif;'>Analysis:</strong> Bay Area Council Economic Institute.<br>
@@ -3250,9 +3299,8 @@ if section == "Employment":
 
             elif subtab == "Industry":
                 show_combined_industry_job_recovery_chart(series_mapping, us_series_mapping, BLS_API_KEY)
-            elif subtab == "Office Sectors":
+            elif subtab == "Office Sector":
                 show_office_tech_recovery_chart(office_metros_mapping, BLS_API_KEY)
-
             elif subtab == "Jobs Ratio":
                 create_jobs_ratio_chart()
 
