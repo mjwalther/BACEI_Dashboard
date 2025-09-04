@@ -2458,7 +2458,7 @@ if section == "Employment":
             hovertemplate=(
                 f"%{{y}}<br>{metric_choice}: %{{x{hover_value_fmt}}}"
                 f"<br>{baseline_label}: %{{customdata[0]:,.0f}}"
-                f"<br>{latest_date.strftime('%b %Y')}: %{{customdata[1]:,.0f}}<extra></extra>"
+                f"<br>{latest_date.strftime('%B %Y')}: %{{customdata[1]:,.0f}}<extra></extra>"
             ),
             customdata=[[baseline_totals[ind], latest_totals[ind]] for ind in order]
         ))
@@ -3282,7 +3282,7 @@ if section == "Employment":
             ),
             barmode='overlay',
             legend=dict(
-                font=dict(family="Avenir", size=30, color="black"),
+                font=dict(family="Avenir", size=25, color="black"),
                 orientation="v",
                 x=1.01,
                 y=1
