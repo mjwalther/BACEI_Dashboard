@@ -70,32 +70,25 @@ def _write_version():
 CSV_OUT = PAGES_OUT / "csv"
 CSV_OUT.mkdir(parents=True, exist_ok=True)
 
-_manifest_rows = []  # collected during build_all_tables()
+_manifest_rows = []
 
 def _write_csv(df, name: str):
-    """
-    Save a CSV alongside the parquet. Files go to docs/data_build/csv/{name}.csv
-    """
+    """docs/data_build/csv/{name}.csv"""
     out = CSV_OUT / f"{name}.csv"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.unlink(missing_ok=True)
     df.to_csv(out, index=False)
 
 def _manifest_add(df, name: str, description: str | None = None):
-    """
-    Append an entry to manifest for visibility & reproducibility.
-    """
-    import hashlib, json, time
-    csv_path = CSV_OUT / f"{name}.csv"
-    # Hash the CSV if it exists; otherwise hash the parquet
-    target = csv_path if csv_path.exists() else (PAGES_OUT / f"{name}.parquet")
+    import hashlib, json
+    target = CSV_OUT / f"{name}.csv"
     try:
         sha256 = hashlib.sha256(target.read_bytes()).hexdigest()
     except Exception:
         sha256 = ""
     schema = [{"name": c, "dtype": str(df[c].dtype)} for c in df.columns]
     _manifest_rows.append({
-        "file": f"csv/{name}.csv",                          # relative to data_build/
+        "file": f"csv/{name}.csv",              # relative to data_build/
         "parquet": f"{name}.parquet",
         "rows": int(len(df)),
         "columns": int(len(df.columns)),
@@ -106,18 +99,11 @@ def _manifest_add(df, name: str, description: str | None = None):
     })
 
 def _write_manifest():
-    """
-    Write docs/data_build/manifest.csv indexing every viz-ready table.
-    """
-    import pandas as pd
-    if not _manifest_rows:
-        return
-    pd.DataFrame(_manifest_rows).to_csv(PAGES_OUT / "manifest.csv", index=False)
+    if _manifest_rows:
+        pd.DataFrame(_manifest_rows).to_csv(PAGES_OUT / "manifest.csv", index=False)
 
 def _write_artifacts(df, name: str, description: str | None = None):
-    """
-    One call that writes parquet + csv and records a manifest entry.
-    """
+    """Write parquet + csv and record in manifest."""
     _write_parquet(df, name)
     _write_csv(df, name)
     _manifest_add(df, name, description)
