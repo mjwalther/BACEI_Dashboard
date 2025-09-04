@@ -64,6 +64,67 @@ def _write_version():
         "last_updated_utc": pd.Timestamp.utcnow().isoformat()
     }), encoding="utf-8")
 
+
+
+# === CSV + Manifest support ===
+CSV_OUT = PAGES_OUT / "csv"
+CSV_OUT.mkdir(parents=True, exist_ok=True)
+
+_manifest_rows = []  # collected during build_all_tables()
+
+def _write_csv(df, name: str):
+    """
+    Save a CSV alongside the parquet. Files go to docs/data_build/csv/{name}.csv
+    """
+    out = CSV_OUT / f"{name}.csv"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.unlink(missing_ok=True)
+    df.to_csv(out, index=False)
+
+def _manifest_add(df, name: str, description: str | None = None):
+    """
+    Append an entry to manifest for visibility & reproducibility.
+    """
+    import hashlib, json, time
+    csv_path = CSV_OUT / f"{name}.csv"
+    # Hash the CSV if it exists; otherwise hash the parquet
+    target = csv_path if csv_path.exists() else (PAGES_OUT / f"{name}.parquet")
+    try:
+        sha256 = hashlib.sha256(target.read_bytes()).hexdigest()
+    except Exception:
+        sha256 = ""
+    schema = [{"name": c, "dtype": str(df[c].dtype)} for c in df.columns]
+    _manifest_rows.append({
+        "file": f"csv/{name}.csv",                          # relative to data_build/
+        "parquet": f"{name}.parquet",
+        "rows": int(len(df)),
+        "columns": int(len(df.columns)),
+        "sha256": sha256,
+        "schema_json": json.dumps(schema, ensure_ascii=False),
+        "description": (description or "").strip(),
+        "generated_utc": pd.Timestamp.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+    })
+
+def _write_manifest():
+    """
+    Write docs/data_build/manifest.csv indexing every viz-ready table.
+    """
+    import pandas as pd
+    if not _manifest_rows:
+        return
+    pd.DataFrame(_manifest_rows).to_csv(PAGES_OUT / "manifest.csv", index=False)
+
+def _write_artifacts(df, name: str, description: str | None = None):
+    """
+    One call that writes parquet + csv and records a manifest entry.
+    """
+    _write_parquet(df, name)
+    _write_csv(df, name)
+    _manifest_add(df, name, description)
+# === end CSV + Manifest support ===
+
+
+
 def build_all_tables():
     """
     Reuse your existing fetching/processing functions to build the exact
@@ -74,7 +135,8 @@ def build_all_tables():
     try:
         bay_df = fetch_bay_area_payroll_data()
         if bay_df is not None:
-            _write_parquet(bay_df, "bay_area_payroll")
+            # _write_parquet(bay_df, "bay_area_payroll")
+            _write_artifacts(bay_df, "bay_area_payroll", "Bay Area Non-Farm Payroll Employment by Month")
             tables["bay_area_payroll"] = bay_df
     except Exception as e:
         st.warning(f"Build: failed bay_area_payroll: {e}")
@@ -82,7 +144,8 @@ def build_all_tables():
     try:
         sonoma_df = fetch_sonoma_payroll_data()
         if sonoma_df is not None:
-            _write_parquet(sonoma_df, "sonoma_payroll")
+            # _write_parquet(sonoma_df, "sonoma_payroll")
+            _write_artifacts(sonoma_df, "sonoma_payroll", "Sonoma Non-Farm Payroll Employment by Month")
             tables["sonoma_payroll"] = sonoma_df
     except Exception as e:
         st.warning(f"Build: failed sonoma_payroll: {e}")
@@ -90,7 +153,8 @@ def build_all_tables():
     try:
         napa_df = fetch_napa_payroll_data()
         if napa_df is not None:
-            _write_parquet(napa_df, "napa_payroll")
+            # _write_parquet(napa_df, "napa_payroll")
+            _write_artifacts(napa_df, "napa_payroll", "Napa Non-Farm Payroll Employment by Month")
             tables["napa_payroll"] = napa_df
     except Exception as e:
         st.warning(f"Build: failed napa_payroll: {e}")
@@ -98,7 +162,8 @@ def build_all_tables():
     try:
         us_df = fetch_us_payroll_data()
         if us_df is not None:
-            _write_parquet(us_df, "us_payroll")
+            # _write_parquet(us_df, "us_payroll")
+            _write_artifacts(us_df, "us_payroll", "U.S. Non-Farm Payroll Employment by Month")
             tables["us_payroll"] = us_df
     except Exception as e:
         st.warning(f"Build: failed us_payroll: {e}")
@@ -108,7 +173,8 @@ def build_all_tables():
         if state_series_ids:
             states_df = fetch_states_job_data(state_series_ids)
             if states_df is not None:
-                _write_parquet(states_df, "states_jobs")
+                # _write_parquet(states_df, "states_jobs")
+                _write_artifacts(states_df, "states_jobs", "Jobs by States")
                 tables["states_jobs"] = states_df
     except Exception as e:
         st.warning(f"Build: failed states_jobs: {e}")
@@ -118,11 +184,13 @@ def build_all_tables():
         if raw:
             unemp_df = process_unemployment_data(raw)
             if unemp_df is not None:
-                _write_parquet(unemp_df, "unemployment_ca")
+                # _write_parquet(unemp_df, "unemployment_ca")
+                _write_artifacts(unemp_df, "unemployment_ca", "Unemployment Rates")
                 tables["unemployment_ca"] = unemp_df
     except Exception as e:
         st.warning(f"Build: failed unemployment_ca: {e}")
 
+    _write_manifest()
     _write_version()
     return tables
 
@@ -144,13 +212,50 @@ def load_prebuilt_or_fetch(name: str, fetch_fn):
 if os.getenv("DASHBOARD_BUILD") == "1":
     try:
         build_all_tables()
-        print("✅ Built artifacts under docs/data_build/")
+        print("Built artifacts under docs/data_build/")
     except Exception as e:
-        print(f"❌ Build failed: {e}")
+        print(f"Build failed: {e}")
         raise
     import sys
     sys.exit(0)
 # === end PREBUILT SUPPORT ===
+
+
+def show_data_downloads():
+    st.subheader("Data Downloads")
+    import pandas as pd, requests
+    from io import StringIO
+
+    def _csv_from_url(url: str) -> pd.DataFrame:
+        r = requests.get(url, timeout=30); r.raise_for_status()
+        return pd.read_csv(StringIO(r.text))
+
+    base = PREBUILT_BASE_URL
+    # Fallback to local dev
+    if not base:
+        st.info("Using local docs/data_build (no PREBUILT_BASE_URL set).")
+        manifest_path = PAGES_OUT / "manifest.csv"
+        if manifest_path.exists():
+            dfm = pd.read_csv(manifest_path)
+        else:
+            st.warning("manifest.csv not found.")
+            return
+    else:
+        manifest_url = f"{base}/data_build/manifest.csv"
+        try:
+            dfm = _csv_from_url(manifest_url)
+        except Exception as e:
+            st.warning(f"Could not load manifest: {e}")
+            return
+
+    for _, row in dfm.iterrows():
+        rel = str(row["file"])  # e.g., csv/bay_area_payroll.csv
+        desc = str(row.get("description", "") or "")
+        link = (PAGES_OUT / rel) if not base else f"{base}/data_build/{rel}"
+        with st.expander(f"{rel} — {desc}"):
+            st.caption(f"Rows: {row['rows']} · Columns: {row['columns']}")
+            st.write(f"[Open raw CSV]({link})")
+
 
 
 
@@ -880,7 +985,7 @@ if section == "Employment":
             xaxis=dict(
                 title='County',
                 title_font=dict(family="Avenir Medium", size=22, color="black"),
-                tickfont=dict(family="Avenir", size=16, color="black"),
+                tickfont=dict(family="Avenir", size=15, color="black"),
             ),
             yaxis=dict(
                 title='Number of Employed Residents',
