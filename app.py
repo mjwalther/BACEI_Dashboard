@@ -13,8 +13,6 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from data_mappings import state_code_map, series_mapping, bay_area_counties, regions, office_metros_mapping, rename_mapping, color_map, sonoma_mapping, us_series_mapping
 
-# BLS_API_KEY= "15060bc07890456a95aa5d0076966247"
-
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -22,14 +20,12 @@ except Exception:
     pass
 
 def get_secret(name: str) -> str | None:
-    # 1) Use env var if present (works in GitHub Actions)
     val = os.getenv(name)
     if val:
         return val
-    # 2) Try Streamlit secrets, but don't crash if missing
     try:
         import streamlit as st
-        return st.secrets[name]   # raises if no .streamlit/secrets.toml
+        return st.secrets[name]
     except Exception:
         return None
 
@@ -40,14 +36,12 @@ if not BLS_API_KEY:
     st.error("Missing BLS_API_KEY. Set it as an environment variable or Streamlit secret.")
     st.stop()
 
-# === PREBUILT ARTIFACT SUPPORT (paste near the top, after imports) ===
 from pathlib import Path
 import json, time
 
 PAGES_OUT = Path("docs/data_build")
 PAGES_OUT.mkdir(parents=True, exist_ok=True)
 
-# You can point to GitHub Pages URL in production if you like
 PREBUILT_BASE_URL = os.getenv(
     "PREBUILT_BASE_URL",
     ""  # leave blank to read local docs/data_build when developing
@@ -62,7 +56,6 @@ def _read_parquet(name: str):
     if PREBUILT_BASE_URL:
         # load from GitHub Pages / CDN
         return pd.read_parquet(f"{PREBUILT_BASE_URL}/data_build/{name}.parquet")
-    # local (e.g., when previewing locally)
     return pd.read_parquet(PAGES_OUT / f"{name}.parquet")
 
 def _write_version():
@@ -78,7 +71,6 @@ def build_all_tables():
     """
     tables = {}
 
-    # --- Payroll datasets (your functions already exist) ---
     try:
         bay_df = fetch_bay_area_payroll_data()
         if bay_df is not None:
@@ -111,10 +103,7 @@ def build_all_tables():
     except Exception as e:
         st.warning(f"Build: failed us_payroll: {e}")
 
-    # If you use state comparisons:
     try:
-        # You already import `series_mapping` / `us_series_mapping`.
-        # If you have a dedicated mapping for states, pass that list of series IDs here.
         state_series_ids = list(series_mapping.get("states", {}).values()) if isinstance(series_mapping.get("states", {}), dict) else []
         if state_series_ids:
             states_df = fetch_states_job_data(state_series_ids)
@@ -124,7 +113,6 @@ def build_all_tables():
     except Exception as e:
         st.warning(f"Build: failed states_jobs: {e}")
 
-    # --- Unemployment (CA Open Data) ---
     try:
         raw = fetch_unemployment_data()
         if raw:
@@ -160,10 +148,11 @@ if os.getenv("DASHBOARD_BUILD") == "1":
     except Exception as e:
         print(f"❌ Build failed: {e}")
         raise
-    # IMPORTANT: exit early so Streamlit UI doesn't run in CI
     import sys
     sys.exit(0)
 # === end PREBUILT SUPPORT ===
+
+
 
 # --- Title ----
 st.set_page_config(page_title="Bay Area Dashboard", layout="wide")
@@ -3327,7 +3316,7 @@ if section == "Employment":
         st.markdown("""
         <div style='font-size: 12px; color: #666; font-family: "Avenir", sans-serif;'>
         <strong style='font-family: "Avenir Medium", sans-serif;'>Source: </strong>Bureau of Labor Statistics (BLS) and Local Area Unemployment Statistics (LAUS), California Open Data Portal.<br>
-        <strong style='font-family: "Avenir Medium", sans-serif;'>Note: </strong>BLS data are seasonally adjusted nonfarm payroll jobs. LAUS data are total employment including farm jobs and self-employed. Each ratio uses the respective year's LAUS data as denominator. Bay Area Total includes all 7 metro divisions/MSAs. Sonoma County 2015 data shown for historical comparison.<br>
+        <strong style='font-family: "Avenir Medium", sans-serif;'>Note: </strong>BLS data are seasonally adjusted nonfarm payroll jobs. LAUS data are total employment including farm jobs and self-employed. Each ratio uses the respective year's LAUS data as denominator. Bay Area Total includes all 7 metro divisions/MSAs.<br>
         <strong style='font-family: "Avenir Medium", sans-serif;'>Analysis:</strong> Bay Area Council Economic Institute.<br>
         </div>
         """, unsafe_allow_html=True)
