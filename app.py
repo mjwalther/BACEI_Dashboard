@@ -22,7 +22,16 @@ except Exception:
     pass
 
 def get_secret(name: str) -> str | None:
-    return os.getenv(name) or (st.secrets.get(name) if hasattr(st, "secrets") else None)
+    # 1) Use env var if present (works in GitHub Actions)
+    val = os.getenv(name)
+    if val:
+        return val
+    # 2) Try Streamlit secrets, but don't crash if missing
+    try:
+        import streamlit as st
+        return st.secrets[name]   # raises if no .streamlit/secrets.toml
+    except Exception:
+        return None
 
 BLS_API_KEY = get_secret("BLS_API_KEY")
 PREBUILT_BASE_URL = get_secret("PREBUILT_BASE_URL")

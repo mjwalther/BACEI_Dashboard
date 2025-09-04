@@ -24,6 +24,8 @@ jobs:
       - name: Build data artifacts
         env:
           DASHBOARD_BUILD: "1"
+          BLS_API_KEY: ${{ secrets.BLS_API_KEY }}
+          PREBUILT_BASE_URL: https://github.com/mjwalther/BACEI_Dashboard
         run: |
           cd $GITHUB_WORKSPACE
           python scripts/build_artifacts.py
