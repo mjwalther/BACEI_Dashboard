@@ -2,33 +2,9 @@
 Data Dashboard on Bay Area's Economy
 
 
-## How to Run Dashboard
+## Run Dashboard
 
-1. **Clone the repository**  
-   Open your terminal or shell (e.g., in VS Code) and run:
-
-   ```bash
-   git clone https://github.com/your-username/BACEI_Dashboard.git
-   cd BACEI_Dashboard
-   ```
-
-2. **Install the required libraries**  
-   Make sure you have Python installed, then run:
-   ```bash
-   pip install streamlit pandas numpy matplotlib requests plotly 
-   ```
-   or try...
-   
-   ```bash
-   pip3 install streamlit pandas numpy matplotlib requests plotly
-   ```
-
-4. **Run the dashboard**  
-   From the terminal, launch the app by running this command:
-
-   ```bash
-   streamlit run app.py
-   ```
+https://bacei-dashboard.streamlit.app/
 
 ---
 
