@@ -13,7 +13,23 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from data_mappings import state_code_map, series_mapping, bay_area_counties, regions, office_metros_mapping, rename_mapping, color_map, sonoma_mapping, us_series_mapping
 
-BLS_API_KEY= "15060bc07890456a95aa5d0076966247"
+# BLS_API_KEY= "15060bc07890456a95aa5d0076966247"
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass
+
+def get_secret(name: str) -> str | None:
+    return os.getenv(name) or (st.secrets.get(name) if hasattr(st, "secrets") else None)
+
+BLS_API_KEY = get_secret("BLS_API_KEY")
+PREBUILT_BASE_URL = get_secret("PREBUILT_BASE_URL")
+
+if not BLS_API_KEY:
+    st.error("Missing BLS_API_KEY. Set it as an environment variable or Streamlit secret.")
+    st.stop()
 
 # === PREBUILT ARTIFACT SUPPORT (paste near the top, after imports) ===
 from pathlib import Path
@@ -3384,81 +3400,89 @@ if section == "Employment":
             "states_jobs",
             lambda: fetch_states_job_data(list(series_mapping.get("states", {}).values()))
         )
+        
+        df_rest_ca = load_prebuilt_or_fetch("rest_ca_payroll", fetch_rest_of_ca_payroll_data)
         df_bay = load_prebuilt_or_fetch("bay_area_payroll", fetch_bay_area_payroll_data)
         df_us = load_prebuilt_or_fetch("us_payroll", fetch_us_payroll_data)
         df_sonoma = load_prebuilt_or_fetch("sonoma_payroll", fetch_sonoma_payroll_data)
         df_napa = load_prebuilt_or_fetch("napa_payroll", fetch_napa_payroll_data)
 
 
-        if df_unemp is not None:
-            if subtab == "Employment":
+        if subtab == "Employment":
+            if df_unemp is not None:
                 show_employment_comparison_chart(df_unemp)
+            else:
+                st.warning("Unemployment dataset is unavailable.")
 
-            elif subtab == "Unemployment":
+        elif subtab == "Unemployment":
+            if df_unemp is not None:
                 show_unemployment_rate_chart(df_unemp)
+            else:
+                st.warning("Unemployment dataset is unavailable right now.")
 
-            elif subtab == "Job Recovery":
-                show_job_recovery_overall(df_states, df_bay, df_us, df_sonoma, df_napa)
-                show_job_recovery_by_state(state_code_map, fetch_states_job_data)
+        elif subtab == "Job Recovery":
+            # show_job_recovery_overall(df_states, df_bay, df_us, df_sonoma, df_napa)
+            show_job_recovery_overall(df_rest_ca, df_bay, df_us, df_sonoma, df_napa)
+            show_job_recovery_by_state(state_code_map, fetch_states_job_data)
 
-            elif subtab == "Monthly Change":
-                
-                region_choice = st.selectbox(
-                    "Select Region:",
-                    options=[
-                        "Bay Area (9-county)",
-                        "United States",
-                        "North Bay",
-                        "East Bay",
-                        "San Francisco-Peninsula",
-                        "South Bay",
-                        "Sonoma County"
-                    ]
-                )
+        elif subtab == "Monthly Change":
+            
+            region_choice = st.selectbox(
+                "Select Region:",
+                options=[
+                    "Bay Area (9-county)",
+                    "United States",
+                    "North Bay",
+                    "East Bay",
+                    "San Francisco-Peninsula",
+                    "South Bay",
+                    "Sonoma County"
+                ]
+            )
 
-                if region_choice == "Bay Area (9-county)":
-                    show_bay_area_monthly_job_change(df_bay)
-                else:
-                    series_id_or_list = regions[region_choice]
-                    if isinstance(series_id_or_list, list):
-                        # Multiple series ("North Bay" includes 4 regions)
-                        dfs = []
-                        for sid in series_id_or_list:
-                            df_r = fetch_and_process_job_data(sid, region_choice)
-                            if df_r is not None:
-                                dfs.append(df_r[["date", "monthly_change"]])
+            if region_choice == "Bay Area (9-county)":
+                show_bay_area_monthly_job_change(df_bay)
+            else:
+                series_id_or_list = regions[region_choice]
+                if isinstance(series_id_or_list, list):
+                    # Multiple series ("North Bay" includes 4 regions)
+                    dfs = []
+                    for sid in series_id_or_list:
+                        df_r = fetch_and_process_job_data(sid, region_choice)
+                        if df_r is not None:
+                            dfs.append(df_r[["date", "monthly_change"]])
 
-                        if dfs:
-                            # Merge and sum job changes on 'date'
-                            df_merged = dfs[0].copy()
-                            for other_df in dfs[1:]:
-                                df_merged = df_merged.merge(other_df, on="date", suffixes=("", "_tmp"))
-                                df_merged["monthly_change"] += df_merged["monthly_change_tmp"]
-                                df_merged.drop(columns=["monthly_change_tmp"], inplace=True)
+                    if dfs:
+                        # Merge and sum job changes on 'date'
+                        df_merged = dfs[0].copy()
+                        for other_df in dfs[1:]:
+                            df_merged = df_merged.merge(other_df, on="date", suffixes=("", "_tmp"))
+                            df_merged["monthly_change"] += df_merged["monthly_change_tmp"]
+                            df_merged.drop(columns=["monthly_change_tmp"], inplace=True)
 
-                            # Add label and color
-                            df_merged["label"] = df_merged["monthly_change"].apply(
-                                lambda x: f"{int(x/1000)}K" if abs(x) >= 1000 else f"{int(x)}"
-                            )
-                            df_merged["color"] = df_merged["monthly_change"].apply(lambda x: "#00aca2" if x >= 0 else "#e63946")
+                        # Add label and color
+                        df_merged["label"] = df_merged["monthly_change"].apply(
+                            lambda x: f"{int(x/1000)}K" if abs(x) >= 1000 else f"{int(x)}"
+                        )
+                        df_merged["color"] = df_merged["monthly_change"].apply(lambda x: "#00aca2" if x >= 0 else "#e63946")
 
-                            create_monthly_job_change_chart(df_merged, region_choice)
-                            create_job_change_summary_table(df_merged)
-                        else:
-                            st.warning(f"No data available for {region_choice}.")
+                        create_monthly_job_change_chart(df_merged, region_choice)
+                        create_job_change_summary_table(df_merged)
                     else:
-                        # Single region (e.g., "East Bay", "South Bay", "SF-Peninsula")
-                        df = fetch_and_process_job_data(series_id_or_list, region_choice)
-                        if df is not None:
-                            create_monthly_job_change_chart(df, region_choice)
-                            create_job_change_summary_table(df)
+                        st.warning(f"No data available for {region_choice}.")
+                else:
+                    # Single region (e.g., "East Bay", "South Bay", "SF-Peninsula")
+                    df = fetch_and_process_job_data(series_id_or_list, region_choice)
+                    if df is not None:
+                        create_monthly_job_change_chart(df, region_choice)
+                        create_job_change_summary_table(df)
 
-            elif subtab == "Industry":
-                show_combined_industry_job_recovery_chart(series_mapping, us_series_mapping, BLS_API_KEY)
-            elif subtab == "Office Sector":
-                show_office_tech_recovery_chart(office_metros_mapping, BLS_API_KEY)
-            elif subtab == "Jobs Ratio":
-                create_jobs_ratio_chart()
+        elif subtab == "Industry":
+            show_combined_industry_job_recovery_chart(series_mapping, us_series_mapping, BLS_API_KEY)
+        elif subtab == "Office Sector":
+            show_office_tech_recovery_chart(office_metros_mapping, BLS_API_KEY)
+        elif subtab == "Jobs Ratio":
+            create_jobs_ratio_chart()
 
     elif section == "Population":
         st.header("Population")
