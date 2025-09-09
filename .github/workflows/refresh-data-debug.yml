@@ -1,0 +1,72 @@
+name: Refresh dashboard data (debug once)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-data:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: refresh-data-debug
+      cancel-in-progress: true
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Reset to latest main
+        run: |
+          git fetch origin
+          git reset --hard origin/main
+          git status
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          pip install -r requirements.txt
+          pip install pyarrow
+
+      - name: Build data artifacts (writes docs/data_build/*)
+        env:
+          DASHBOARD_BUILD: "1"
+          BLS_API_KEY: ${{ secrets.BLS_API_KEY }}
+        run: |
+          python scripts/build_artifacts.py
+
+      # ---- DIAGNOSTICS ----
+      - name: Show app.py lines that set filenames (sanity)
+        run: |
+          echo "---- grep _write_artifacts in app.py ----"
+          grep -n "_write_artifacts" -n app.py || true
+
+      - name: List data_build contents and diff
+        run: |
+          echo "---- list docs/data_build ----"
+          find docs/data_build -maxdepth 2 -type f -print
+          echo "---- manifest head ----"
+          head -n 20 docs/data_build/manifest.csv || true
+          echo "---- git status ----"
+          git status --porcelain=v1 docs/data_build || true
+          echo "---- diff stat ----"
+          git diff --stat || true
+
+      # Commit & push (stage renames/deletions too)
+      - name: Commit updated artifacts to Pages folder
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A docs/data_build
+          changes=$(git status --porcelain=v1 docs/data_build | wc -l)
+          if [ "$changes" -eq "0" ]; then
+            echo "No changes to docs/data_build – failing so you notice."
+            exit 2
+          fi
+          git commit -m "chore(data): refresh artifacts [skip ci]"
+          git push origin HEAD:main
