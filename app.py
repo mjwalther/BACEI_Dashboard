@@ -171,10 +171,10 @@ def build_all_tables():
             unemp_df = process_unemployment_data(raw)
             if unemp_df is not None:
                 # _write_parquet(unemp_df, "unemployment_ca")
-                _write_artifacts(unemp_df, "unemployment_ca", "CA Open Data Portal Local Area Unemployment Statistics (Bay Area only)")
-                tables["unemployment_ca"] = unemp_df
+                _write_artifacts(unemp_df, "LAUS_Bay_Area", "CA Open Data Portal Local Area Unemployment Statistics (Bay Area only)")
+                tables["LAUS_Bay_Area"] = unemp_df
     except Exception as e:
-        st.warning(f"Build: failed unemployment_ca: {e}")
+        st.warning(f"Build: failed LAUS_Bay_Area: {e}")
 
     _write_manifest()
     _write_version()
