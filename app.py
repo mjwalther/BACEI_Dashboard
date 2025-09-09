@@ -224,6 +224,642 @@ def load_prebuilt_or_fetch(name: str, fetch_fn):
             pass  # fall through to fetching
     return fetch_fn()
 
+
+# --- Data Fetching ---
+
+# Cache data with streamlit for 24 hours (data will be updated once a day)
+# TO DO: Need a better method for having data be continuously called so as to not have loading time
+@st.cache_data(ttl=86400)        
+def fetch_unemployment_data():
+    """
+    Fetches labor force data from the California Open Data Portal (LAUS dataset).
+
+    Gets full dataset in chunks from the API endpoint, handling pagination and connection.
+    Returns a list of records containing monthly employment, unemployment, labor force size,
+    and unemployment rates for California counties.
+
+    Returns:
+        list[dict] or None: A list of record dictionaries if successful, or None if an error occurs.
+    """
+
+    API_ENDPOINT = "https://data.ca.gov/api/3/action/datastore_search"
+    RESOURCE_ID = "b4bc4656-7866-420f-8d87-4eda4c9996ed"
+
+    try:
+        # Fetch total records using an API request
+        response = requests.get(API_ENDPOINT, params={"resource_id": RESOURCE_ID, "limit": 1}, timeout=30)
+        if response.status_code != 200:
+            st.error(f"Failed to connect to API. Status code: {response.status_code}")
+            return None
+
+        total_records = response.json()["result"]["total"]
+        all_data = []
+        chunk_size = 10000
+
+        # Look through total records in chunks to fetch data
+        for offset in range(0, total_records, chunk_size):
+            response = requests.get(API_ENDPOINT, params={
+                "resource_id": RESOURCE_ID,
+                "limit": min(chunk_size, total_records - offset),
+                "offset": offset
+            }, timeout=30)
+            if response.status_code == 200:
+                all_data.extend(response.json()["result"]["records"])
+            else:
+                st.warning(f"Failed to fetch chunk at offset {offset}")
+
+        return all_data
+
+    except Exception as e:
+        st.error(f"Error fetching data: {str(e)}")
+        return None
+    
+
+@st.cache_data(ttl=86400)
+def fetch_rest_of_ca_payroll_data():
+    """
+    Fetches seasonally adjusted nonfarm payroll employment data for California from the U.S. Bureau of Labor Statistics (BLS).
+
+    Uses the BLS Public API to retrieve monthly statewide employment figures from 2020 to the present. 
+    The function processes the time series into a pandas DataFrame and computes the percent change in 
+    employment relative to February 2020 (pre-pandemic baseline).
+
+    Returns:
+        pd.DataFrame or None: A DataFrame with columns ['date', 'value', 'pct_change'], where:
+            - 'date' is a datetime object representing the month,
+            - 'value' is the number of jobs (in actual counts),
+            - 'pct_change' is the percent change in employment from February 2020.
+            Returns None if the API call fails or data is missing.
+    """
+
+    rest_of_ca_series_ids = [
+        "SMS06125400000000001",  # Bakersfield-Delano, CA
+        "SMS06170200000000001",  # Chico, CA
+        "SMS06209400000000001",  # El Centro, CA
+        "SMS06234200000000001",  # Fresno, CA
+        "SMS06252600000000001",  # Hanford-Corcoran, CA
+        "SMS06310800000000001",  # Los Angeles-Long Beach-Anaheim, CA
+        "SMS06329000000000001",  # Merced, CA
+        "SMS06337000000000001",  # Modesto, CA
+        "SMS06371000000000001",  # Oxnard-Thousand Oaks-Ventura, CA
+        "SMS06398200000000001",  # Redding, CA
+        "SMS06401400000000001",  # Riverside-San Bernardino-Ontario, CA
+        "SMS06409000000000001",  # Sacramento-Roseville-Folsom, CA
+        "SMS06415000000000001",  # Salinas, CA
+        "SMS06417400000000001",  # San Diego-Chula Vista-Carlsbad, CA
+        "SMS06420200000000001",  # San Luis Obispo-Paso Robles, CA
+        "SMS06421000000000001",  # Santa Cruz-Watsonville, CA
+        "SMS06422000000000001",  # Santa Maria-Santa Barbara, CA
+        "SMS06447000000000001",  # Stockton-Lodi, CA
+        "SMS06473000000000001",  # Visalia, CA
+        "SMS06497000000000001",  # Yuba City, CA
+    ]
+
+    payload = {
+        "seriesid": rest_of_ca_series_ids,
+        "startyear": "2020",
+        "endyear": str(datetime.now().year),
+        "registrationKey": BLS_API_KEY
+    }
+
+    try:
+        response = requests.post(
+            "https://api.bls.gov/publicAPI/v2/timeseries/data/",
+            json=payload, timeout=30
+        )
+        data = response.json()
+        if "Results" not in data or "series" not in data["Results"]:
+            st.error("BLS API error: No results returned for Rest of CA.")
+            return None
+
+        all_series = []
+        for series in data["Results"]["series"]:
+            df = pd.DataFrame(series["data"])
+            df = df[df["period"] != "M13"]
+            df["date"] = pd.to_datetime(df["year"] + df["periodName"], format="%Y%B", errors="coerce")
+            df["value"] = pd.to_numeric(df["value"], errors="coerce") * 1000
+            df = df[["date", "value"]].sort_values("date")
+            all_series.append(df)
+
+        merged_df = all_series[0].copy()
+        for other_df in all_series[1:]:
+            merged_df = pd.merge(merged_df, other_df, on="date", how="outer", suffixes=("", "_x"))
+            value_cols = [col for col in merged_df.columns if "value" in col]
+            merged_df["value"] = merged_df[value_cols].sum(axis=1, skipna=True)
+            merged_df = merged_df[["date", "value"]]
+
+        baseline = merged_df.loc[merged_df["date"] == "2020-02-01", "value"]
+        if baseline.empty or pd.isna(baseline.iloc[0]):
+            st.warning("Missing baseline for Rest of CA.")
+            return None
+
+        baseline_value = baseline.iloc[0]
+        merged_df["pct_change"] = (merged_df["value"] / baseline_value - 1) * 100
+        return merged_df
+
+    except Exception as e:
+        st.error(f"Failed to fetch Rest of CA data: {e}")
+        return None
+    
+
+@st.cache_data(ttl=86400)
+def fetch_bay_area_payroll_data():
+    """
+    Fetches and aggregates nonfarm payroll employment data for selected Bay Area regions
+    from the U.S. Bureau of Labor Statistics (BLS).
+
+    Combines multiple MSA/MD series to approximate a regional Bay Area total.
+    Computes percent change in employment relative to February 2020.
+
+    Returns:
+        pd.DataFrame or None: DataFrame with ['date', 'value', 'pct_change'] columns,
+        or None if all data fetches fail.
+    """
+
+    series_ids = [
+        "SMS06349000000000001",  # Napa MSA
+        "SMS06360840000000001",  # Oakland-Fremont-Hayward MD
+        "SMS06418840000000001",  # San Francisco-San Mateo-Redwood City MD
+        "SMS06419400000000001",  # San Jose-Sunnyvale-Santa Clara MSA
+        "SMS06420340000000001",  # San Rafael MD
+        "SMS06422200000000001",  # Santa Rosa-Petaluma MSA
+        "SMS06467000000000001"   # Vallejo MSA
+    ]
+
+    payload = {
+        "seriesid": series_ids,
+        "startyear": "2020",
+        "endyear": str(datetime.now().year),
+        "registrationKey": BLS_API_KEY
+    }
+
+    try:
+        response = requests.post(
+            "https://api.bls.gov/publicAPI/v2/timeseries/data/",
+            json=payload, timeout=30
+        )
+        data = response.json()
+        if "Results" not in data or "series" not in data["Results"]:
+            st.error("BLS API error: No results returned.")
+            return None
+
+        all_series = []
+        for series in data["Results"]["series"]:
+            if not series["data"]:
+                st.warning(f"No data found for series ID: {series['seriesID']}")
+                continue
+            try:
+                df = pd.DataFrame(series["data"])
+                df = df[df["period"] != "M13"]  # Exclude annual average rows
+                df["date"] = pd.to_datetime(df["year"] + df["periodName"], format="%Y%B", errors="coerce")
+
+                df["value"] = pd.to_numeric(df["value"], errors="coerce") * 1000
+                df = df[["date", "value"]].sort_values("date")
+                all_series.append(df)
+            except Exception as e:
+                st.warning(f"Error processing series {series['seriesID']}: {e}")
+
+        if not all_series:
+            st.error("No Bay Area payroll data could be processed.")
+            return None
+
+        # Merge all series on date by summing values
+        merged_df = all_series[0].copy()
+        for other_df in all_series[1:]:
+            merged_df = pd.merge(merged_df, other_df, on="date", how="outer", suffixes=("", "_x"))
+
+            # If multiple columns named 'value', sum and clean
+            value_cols = [col for col in merged_df.columns if "value" in col]
+            merged_df["value"] = merged_df[value_cols].sum(axis=1, skipna=True)
+            merged_df = merged_df[["date", "value"]]
+
+        merged_df = merged_df.sort_values("date")
+
+        # Baseline = Feb 2020
+        baseline = merged_df.loc[merged_df["date"] == "2020-02-01", "value"]
+        if baseline.empty or pd.isna(baseline.iloc[0]):
+            st.warning("No baseline value found for Bay Area (Feb 2020).")
+            return None
+
+        baseline_value = baseline.iloc[0]
+        merged_df["pct_change"] = (merged_df["value"] / baseline_value - 1) * 100
+
+        return merged_df
+
+    except Exception as e:
+        st.error(f"Failed to fetch Bay Area BLS data: {e}")
+        return None
+    
+
+@st.cache_data(ttl=86400)
+def fetch_sonoma_payroll_data():
+    """
+    SONOMA COUNTY ONLY
+    """
+
+    series_ids = [
+        "SMS06422200000000001"  # Santa Rosa-Petaluma MSA  
+    ]
+
+    payload = {
+        "seriesid": series_ids,
+        "startyear": "2020",
+        "endyear": str(datetime.now().year),
+        "registrationKey": BLS_API_KEY
+    }
+
+    try:
+        response = requests.post(
+            "https://api.bls.gov/publicAPI/v2/timeseries/data/",
+            json=payload, timeout=30
+        )
+        data = response.json()
+        if "Results" not in data or "series" not in data["Results"]:
+            st.error("BLS API error: No results returned.")
+            return None
+
+        all_series = []
+        for series in data["Results"]["series"]:
+            if not series["data"]:
+                st.warning(f"No data found for series ID: {series['seriesID']}")
+                continue
+            try:
+                df = pd.DataFrame(series["data"])
+                df = df[df["period"] != "M13"]  # Exclude annual average rows
+                df["date"] = pd.to_datetime(df["year"] + df["periodName"], format="%Y%B", errors="coerce")
+
+                df["value"] = pd.to_numeric(df["value"], errors="coerce") * 1000
+                df = df[["date", "value"]].sort_values("date")
+                all_series.append(df)
+            except Exception as e:
+                st.warning(f"Error processing series {series['seriesID']}: {e}")
+
+        if not all_series:
+            st.error("No Sonoma payroll data could be processed.")
+            return None
+
+        # Merge all series on date by summing values
+        merged_df = all_series[0].copy()
+        for other_df in all_series[1:]:
+            merged_df = pd.merge(merged_df, other_df, on="date", how="outer", suffixes=("", "_x"))
+
+            # If multiple columns named 'value', sum and clean
+            value_cols = [col for col in merged_df.columns if "value" in col]
+            merged_df["value"] = merged_df[value_cols].sum(axis=1, skipna=True)
+            merged_df = merged_df[["date", "value"]]
+
+        merged_df = merged_df.sort_values("date")
+
+        # Baseline = Feb 2020
+        baseline = merged_df.loc[merged_df["date"] == "2020-02-01", "value"]
+        if baseline.empty or pd.isna(baseline.iloc[0]):
+            st.warning("No baseline value found for Sonoma (Feb 2020).")
+            return None
+
+        baseline_value = baseline.iloc[0]
+        merged_df["pct_change"] = (merged_df["value"] / baseline_value - 1) * 100
+
+        return merged_df
+
+    except Exception as e:
+        st.error(f"Failed to fetch Sonoma BLS data: {e}")
+        return None
+    
+@st.cache_data(ttl=86400)
+def fetch_napa_payroll_data():
+    """
+    NAPA COUNTY ONLY
+    """
+
+    series_ids = [
+        "SMS06349000000000001"  # Napa MSA
+    ]
+
+    payload = {
+        "seriesid": series_ids,
+        "startyear": "2020",
+        "endyear": str(datetime.now().year),
+        "registrationKey": BLS_API_KEY
+    }
+
+    try:
+        response = requests.post(
+            "https://api.bls.gov/publicAPI/v2/timeseries/data/",
+            json=payload, timeout=30
+        )
+        data = response.json()
+        if "Results" not in data or "series" not in data["Results"]:
+            st.error("BLS API error: No results returned.")
+            return None
+
+        all_series = []
+        for series in data["Results"]["series"]:
+            if not series["data"]:
+                st.warning(f"No data found for series ID: {series['seriesID']}")
+                continue
+            try:
+                df = pd.DataFrame(series["data"])
+                df = df[df["period"] != "M13"]  # Exclude annual average rows
+                df["date"] = pd.to_datetime(df["year"] + df["periodName"], format="%Y%B", errors="coerce")
+
+                df["value"] = pd.to_numeric(df["value"], errors="coerce") * 1000
+                df = df[["date", "value"]].sort_values("date")
+                all_series.append(df)
+            except Exception as e:
+                st.warning(f"Error processing series {series['seriesID']}: {e}")
+
+        if not all_series:
+            st.error("No Napa payroll data could be processed.")
+            return None
+
+        # Merge all series on date by summing values
+        merged_df = all_series[0].copy()
+        for other_df in all_series[1:]:
+            merged_df = pd.merge(merged_df, other_df, on="date", how="outer", suffixes=("", "_x"))
+
+            # If multiple columns named 'value', sum and clean
+            value_cols = [col for col in merged_df.columns if "value" in col]
+            merged_df["value"] = merged_df[value_cols].sum(axis=1, skipna=True)
+            merged_df = merged_df[["date", "value"]]
+
+        merged_df = merged_df.sort_values("date")
+
+        # Baseline = Feb 2020
+        baseline = merged_df.loc[merged_df["date"] == "2020-02-01", "value"]
+        if baseline.empty or pd.isna(baseline.iloc[0]):
+            st.warning("No baseline value found for Sonoma (Feb 2020).")
+            return None
+
+        baseline_value = baseline.iloc[0]
+        merged_df["pct_change"] = (merged_df["value"] / baseline_value - 1) * 100
+
+        return merged_df
+
+    except Exception as e:
+        st.error(f"Failed to fetch Sonoma BLS data: {e}")
+        return None
+    
+
+@st.cache_data(ttl=86400)
+def fetch_california_payroll_data():
+    """
+    Fetches seasonally adjusted total nonfarm payroll employment for California
+    (BLS series: SMS06000000000000001), computes percent change since Feb 2020.
+
+    Returns:
+        DataFrame with columns: ['date', 'value', 'pct_change']
+        or None on failure.
+    """
+    SERIES_ID = "SMS06000000000000001"  # CA total nonfarm, SA
+    payload = {
+        "seriesid": [SERIES_ID],
+        "startyear": "2020",
+        "endyear": str(datetime.now().year),
+        "registrationKey": BLS_API_KEY,
+    }
+
+    try:
+        resp = requests.post(
+            "https://api.bls.gov/publicAPI/v2/timeseries/data/",
+            json=payload,
+            timeout=30,
+        )
+        data = resp.json()
+        if "Results" not in data or not data["Results"].get("series"):
+            st.error("No results returned from BLS for California.")
+            return None
+
+        series = data["Results"]["series"][0]["data"]
+        if not series:
+            st.error("Empty series for California.")
+            return None
+
+        df = pd.DataFrame(series)
+        df = df[df["period"] != "M13"]  # drop annual
+        # 'year' + 'periodName' (e.g., "2024" + "August")
+        df["date"] = pd.to_datetime(df["year"] + df["periodName"], format="%Y%B", errors="coerce")
+        # State/area payrolls are reported in thousands → scale to actual counts
+        df["value"] = pd.to_numeric(df["value"], errors="coerce") * 1000
+        df = df[["date", "value"]].dropna().sort_values("date")
+
+        if df.empty:
+            st.error("Parsed California dataframe is empty.")
+            return None
+
+        # Baseline: prefer exact Feb 2020, else first available >= Feb 2020, else first row
+        feb2020 = pd.to_datetime("2020-02-01")
+        baseline_series = df.loc[df["date"] == feb2020, "value"]
+        if baseline_series.empty:
+            after_feb = df[df["date"] >= feb2020]
+            if not after_feb.empty:
+                baseline_val = after_feb.iloc[0]["value"]
+            else:
+                baseline_val = df.iloc[0]["value"]
+        else:
+            baseline_val = baseline_series.iloc[0]
+
+        if baseline_val is None or baseline_val == 0:
+            st.error("Invalid baseline for California.")
+            return None
+
+        df["pct_change"] = (df["value"] / baseline_val - 1) * 100
+        return df
+
+    except Exception as e:
+        st.error(f"Failed to fetch California payroll data: {e}")
+        return None
+
+
+@st.cache_data(ttl=86400)
+def fetch_us_payroll_data():
+    """
+    Fetches and processes national-level seasonally adjusted nonfarm payroll employment data
+    for the United States from the U.S. Bureau of Labor Statistics (BLS) API.
+
+    Retrieves monthly total nonfarm employment counts from January 2020 to the latest available month. 
+    Calculates the percent change in employment relative to February 2020 (pre-pandemic baseline).
+
+    Returns:
+        pd.DataFrame or None: DataFrame with the following columns:
+            - 'date': pandas datetime object representing each month.
+            - 'value': Number of jobs (in actual counts, not thousands).
+            - 'pct_change': Percent change in employment since February 2020.
+        
+        Returns None if the API call fails or the required data is unavailable.
+    """
+
+    SERIES_ID = "CES0000000001"  # U.S. nonfarm payroll, seasonally adjusted
+    payload = {
+        "seriesid": [SERIES_ID],
+        "startyear": "2020",
+        "endyear": str(datetime.now().year),
+        "registrationKey": BLS_API_KEY
+    }
+
+    try:
+        response = requests.post(
+            "https://api.bls.gov/publicAPI/v2/timeseries/data/",
+            json=payload,
+            timeout=30
+        )
+        data = response.json()
+        if "Results" not in data:
+            st.error("No results returned from BLS for U.S.")
+            return None
+
+        series = data["Results"]["series"][0]["data"]
+        df = pd.DataFrame(series)
+        df = df[df["period"] != "M13"]
+        df["date"] = pd.to_datetime(df["year"] + df["periodName"], format="%Y%B", errors="coerce")
+        df["value"] = df["value"].astype(float) * 1000
+        df = df[["date", "value"]].sort_values("date")
+
+        baseline = df.loc[df["date"] == "2020-02-01", "value"].iloc[0]
+        df["pct_change"] = (df["value"] / baseline - 1) * 100
+
+        return df
+
+    except Exception as e:
+        st.error(f"Failed to fetch U.S. payroll data: {e}")
+        return None
+
+
+@st.cache_data(ttl=86400)
+def fetch_states_job_data(series_ids):
+    """
+    Fetches and processes monthly seasonally adjusted nonfarm payroll employment data 
+    for multiple U.S. states from the Bureau of Labor Statistics (BLS) API.
+
+    Handles API limitations by batching requests in chunks of 25 series IDs. 
+    For each state, calculates the percent change in employment relative to February 2020 (pre-pandemic baseline).
+    Associates each series ID with its corresponding state name using the provided `state_code_map`.
+
+    Args:
+        series_ids (list of str): List of BLS series IDs representing state-level nonfarm payroll data.
+
+    Returns:
+        pd.DataFrame or None: A concatenated DataFrame containing:
+            - 'date': pandas datetime object for each month.
+            - 'value': Number of jobs (in actual counts, not thousands).
+            - 'pct_change': Percent change in employment since February 2020.
+            - 'State': Name of the U.S. state corresponding to each series.
+        
+        Returns None if no data is successfully fetched or processed.
+    """
+
+    def chunk_list(lst, size):
+        return [lst[i:i+size] for i in range(0, len(lst), size)]
+
+    chunks = chunk_list(series_ids, 25)  # Safe limit per API docs
+    all_dfs = []
+    received_ids = set()
+
+    # Chunking API requests
+    for chunk in chunks:
+        payload = {
+            "seriesid": chunk,
+            "startyear": "2020",
+            "endyear": str(datetime.now().year),
+            "registrationKey": BLS_API_KEY
+        }
+
+        try:
+            response = requests.post(
+                "https://api.bls.gov/publicAPI/v2/timeseries/data/",
+                json=payload,
+                timeout=30
+            )
+            data = response.json()
+            for series in data.get("Results", {}).get("series", []):
+                sid = series["seriesID"]
+                received_ids.add(sid)
+                state_name = next((name for name, code in state_code_map.items() if code == sid), sid)
+                if not series["data"]:
+                    st.warning(f"No data returned for {state_name}.")
+                    continue
+
+                df = pd.DataFrame(series["data"])
+                df = df[df["period"] != "M13"]
+                df["date"] = pd.to_datetime(df["year"] + df["periodName"], format="%Y%B", errors="coerce")
+                df["value"] = pd.to_numeric(df["value"], errors="coerce") * 1000
+                df = df[["date", "value"]].sort_values("date")
+
+                # Calculate percent change from February 2020
+                baseline = df.loc[df["date"] == "2020-02-01", "value"]
+                if not baseline.empty:
+                    df["pct_change"] = (df["value"] / baseline.iloc[0] - 1) * 100
+                    df["State"] = state_name
+                    all_dfs.append(df)
+
+        except Exception as e:
+            st.error(f"Error fetching chunk: {e}")
+
+    missing = set(series_ids) - received_ids
+    for sid in missing:
+        state_name = next((name for name, code in state_code_map.items() if code == sid), sid)
+        st.warning(f"BLS API did not return data for {state_name}.")
+
+    return pd.concat(all_dfs, ignore_index=True) if all_dfs else None
+
+
+# --- Data Processing ---
+
+
+def process_unemployment_data(data):
+    """
+    Cleans and processes raw employment data from the CA Open Data Portal.
+
+    Filters dataset to include only Bay Area counties and seasonally adjusted county-level data.
+    Parses datetime column from available options. Renames key columns for clarity, sorts data,
+    removes duplicates, and filters records to include only data from Feb 2020 onwards.
+
+    Args:
+        data (list[dict]): Raw records returned from the CA Open Data API.
+
+    Returns:
+        pd.DataFrame or None: A cleaned DataFrame with columns ['County', 'LaborForce', 'Employment',
+        'UnemploymentRate', 'date'], or None if input data is invalid or no valid date column is found.    
+    """
+
+    if not data:
+        return None
+
+    df = pd.DataFrame(data)
+    df = df[(df["Area Type"] == "County") & (df["Area Name"].isin(bay_area_counties))]
+
+    if "Seasonally Adjusted" in df.columns:
+        df = df[df["Seasonally Adjusted"] == "Y"]
+
+    # Parse date column
+    for col in ["Date_Numeric", "Date", "Period", "Month", "Year"]:
+        if col in df.columns:
+            df["date"] = pd.to_datetime(df[col], format="%m/%Y", errors='coerce')
+            break
+    else:
+        st.error("No valid date column found.")
+        return None
+    
+    # Renaming column names
+    df = df.rename(columns={
+        "Area Name": "County",
+        "Labor Force": "LaborForce",
+        "Employment": "Employment",
+        "Unemployment Rate": "UnemploymentRate"
+    })
+
+    # Sort data by County names, then by date
+    df = df.sort_values(by=["County", "date"])
+    df = df.drop_duplicates(subset=["County", "date"], keep="first")
+    
+    # Filter for Feb 2020 and onwards
+    cutoff = datetime(2020, 2, 1)
+    df = df[df["date"] >= cutoff]
+
+    return df
+
+
+
+
 # === Build mode for GitHub Actions / local cron ===
 if os.getenv("DASHBOARD_BUILD") == "1":
     try:
@@ -428,639 +1064,6 @@ if is_downloads:
 
 # --- Main Content ---
 if section == "Employment":
-
-    # --- Data Fetching ---
-
-    # Cache data with streamlit for 24 hours (data will be updated once a day)
-    # TO DO: Need a better method for having data be continuously called so as to not have loading time
-    @st.cache_data(ttl=86400)        
-    def fetch_unemployment_data():
-        """
-        Fetches labor force data from the California Open Data Portal (LAUS dataset).
-
-        Gets full dataset in chunks from the API endpoint, handling pagination and connection.
-        Returns a list of records containing monthly employment, unemployment, labor force size,
-        and unemployment rates for California counties.
-
-        Returns:
-            list[dict] or None: A list of record dictionaries if successful, or None if an error occurs.
-        """
-
-        API_ENDPOINT = "https://data.ca.gov/api/3/action/datastore_search"
-        RESOURCE_ID = "b4bc4656-7866-420f-8d87-4eda4c9996ed"
-
-        try:
-            # Fetch total records using an API request
-            response = requests.get(API_ENDPOINT, params={"resource_id": RESOURCE_ID, "limit": 1}, timeout=30)
-            if response.status_code != 200:
-                st.error(f"Failed to connect to API. Status code: {response.status_code}")
-                return None
-
-            total_records = response.json()["result"]["total"]
-            all_data = []
-            chunk_size = 10000
-
-            # Look through total records in chunks to fetch data
-            for offset in range(0, total_records, chunk_size):
-                response = requests.get(API_ENDPOINT, params={
-                    "resource_id": RESOURCE_ID,
-                    "limit": min(chunk_size, total_records - offset),
-                    "offset": offset
-                }, timeout=30)
-                if response.status_code == 200:
-                    all_data.extend(response.json()["result"]["records"])
-                else:
-                    st.warning(f"Failed to fetch chunk at offset {offset}")
-
-            return all_data
-
-        except Exception as e:
-            st.error(f"Error fetching data: {str(e)}")
-            return None
-        
-
-    @st.cache_data(ttl=86400)
-    def fetch_rest_of_ca_payroll_data():
-        """
-        Fetches seasonally adjusted nonfarm payroll employment data for California from the U.S. Bureau of Labor Statistics (BLS).
-
-        Uses the BLS Public API to retrieve monthly statewide employment figures from 2020 to the present. 
-        The function processes the time series into a pandas DataFrame and computes the percent change in 
-        employment relative to February 2020 (pre-pandemic baseline).
-
-        Returns:
-            pd.DataFrame or None: A DataFrame with columns ['date', 'value', 'pct_change'], where:
-                - 'date' is a datetime object representing the month,
-                - 'value' is the number of jobs (in actual counts),
-                - 'pct_change' is the percent change in employment from February 2020.
-                Returns None if the API call fails or data is missing.
-        """
-
-        rest_of_ca_series_ids = [
-            "SMS06125400000000001",  # Bakersfield-Delano, CA
-            "SMS06170200000000001",  # Chico, CA
-            "SMS06209400000000001",  # El Centro, CA
-            "SMS06234200000000001",  # Fresno, CA
-            "SMS06252600000000001",  # Hanford-Corcoran, CA
-            "SMS06310800000000001",  # Los Angeles-Long Beach-Anaheim, CA
-            "SMS06329000000000001",  # Merced, CA
-            "SMS06337000000000001",  # Modesto, CA
-            "SMS06371000000000001",  # Oxnard-Thousand Oaks-Ventura, CA
-            "SMS06398200000000001",  # Redding, CA
-            "SMS06401400000000001",  # Riverside-San Bernardino-Ontario, CA
-            "SMS06409000000000001",  # Sacramento-Roseville-Folsom, CA
-            "SMS06415000000000001",  # Salinas, CA
-            "SMS06417400000000001",  # San Diego-Chula Vista-Carlsbad, CA
-            "SMS06420200000000001",  # San Luis Obispo-Paso Robles, CA
-            "SMS06421000000000001",  # Santa Cruz-Watsonville, CA
-            "SMS06422000000000001",  # Santa Maria-Santa Barbara, CA
-            "SMS06447000000000001",  # Stockton-Lodi, CA
-            "SMS06473000000000001",  # Visalia, CA
-            "SMS06497000000000001",  # Yuba City, CA
-        ]
-
-        payload = {
-            "seriesid": rest_of_ca_series_ids,
-            "startyear": "2020",
-            "endyear": str(datetime.now().year),
-            "registrationKey": BLS_API_KEY
-        }
-
-        try:
-            response = requests.post(
-                "https://api.bls.gov/publicAPI/v2/timeseries/data/",
-                json=payload, timeout=30
-            )
-            data = response.json()
-            if "Results" not in data or "series" not in data["Results"]:
-                st.error("BLS API error: No results returned for Rest of CA.")
-                return None
-
-            all_series = []
-            for series in data["Results"]["series"]:
-                df = pd.DataFrame(series["data"])
-                df = df[df["period"] != "M13"]
-                df["date"] = pd.to_datetime(df["year"] + df["periodName"], format="%Y%B", errors="coerce")
-                df["value"] = pd.to_numeric(df["value"], errors="coerce") * 1000
-                df = df[["date", "value"]].sort_values("date")
-                all_series.append(df)
-
-            merged_df = all_series[0].copy()
-            for other_df in all_series[1:]:
-                merged_df = pd.merge(merged_df, other_df, on="date", how="outer", suffixes=("", "_x"))
-                value_cols = [col for col in merged_df.columns if "value" in col]
-                merged_df["value"] = merged_df[value_cols].sum(axis=1, skipna=True)
-                merged_df = merged_df[["date", "value"]]
-
-            baseline = merged_df.loc[merged_df["date"] == "2020-02-01", "value"]
-            if baseline.empty or pd.isna(baseline.iloc[0]):
-                st.warning("Missing baseline for Rest of CA.")
-                return None
-
-            baseline_value = baseline.iloc[0]
-            merged_df["pct_change"] = (merged_df["value"] / baseline_value - 1) * 100
-            return merged_df
-
-        except Exception as e:
-            st.error(f"Failed to fetch Rest of CA data: {e}")
-            return None
-        
-
-    @st.cache_data(ttl=86400)
-    def fetch_bay_area_payroll_data():
-        """
-        Fetches and aggregates nonfarm payroll employment data for selected Bay Area regions
-        from the U.S. Bureau of Labor Statistics (BLS).
-
-        Combines multiple MSA/MD series to approximate a regional Bay Area total.
-        Computes percent change in employment relative to February 2020.
-
-        Returns:
-            pd.DataFrame or None: DataFrame with ['date', 'value', 'pct_change'] columns,
-            or None if all data fetches fail.
-        """
-
-        series_ids = [
-            "SMS06349000000000001",  # Napa MSA
-            "SMS06360840000000001",  # Oakland-Fremont-Hayward MD
-            "SMS06418840000000001",  # San Francisco-San Mateo-Redwood City MD
-            "SMS06419400000000001",  # San Jose-Sunnyvale-Santa Clara MSA
-            "SMS06420340000000001",  # San Rafael MD
-            "SMS06422200000000001",  # Santa Rosa-Petaluma MSA
-            "SMS06467000000000001"   # Vallejo MSA
-        ]
-
-        payload = {
-            "seriesid": series_ids,
-            "startyear": "2020",
-            "endyear": str(datetime.now().year),
-            "registrationKey": BLS_API_KEY
-        }
-
-        try:
-            response = requests.post(
-                "https://api.bls.gov/publicAPI/v2/timeseries/data/",
-                json=payload, timeout=30
-            )
-            data = response.json()
-            if "Results" not in data or "series" not in data["Results"]:
-                st.error("BLS API error: No results returned.")
-                return None
-
-            all_series = []
-            for series in data["Results"]["series"]:
-                if not series["data"]:
-                    st.warning(f"No data found for series ID: {series['seriesID']}")
-                    continue
-                try:
-                    df = pd.DataFrame(series["data"])
-                    df = df[df["period"] != "M13"]  # Exclude annual average rows
-                    df["date"] = pd.to_datetime(df["year"] + df["periodName"], format="%Y%B", errors="coerce")
-
-                    df["value"] = pd.to_numeric(df["value"], errors="coerce") * 1000
-                    df = df[["date", "value"]].sort_values("date")
-                    all_series.append(df)
-                except Exception as e:
-                    st.warning(f"Error processing series {series['seriesID']}: {e}")
-
-            if not all_series:
-                st.error("No Bay Area payroll data could be processed.")
-                return None
-
-            # Merge all series on date by summing values
-            merged_df = all_series[0].copy()
-            for other_df in all_series[1:]:
-                merged_df = pd.merge(merged_df, other_df, on="date", how="outer", suffixes=("", "_x"))
-
-                # If multiple columns named 'value', sum and clean
-                value_cols = [col for col in merged_df.columns if "value" in col]
-                merged_df["value"] = merged_df[value_cols].sum(axis=1, skipna=True)
-                merged_df = merged_df[["date", "value"]]
-
-            merged_df = merged_df.sort_values("date")
-
-            # Baseline = Feb 2020
-            baseline = merged_df.loc[merged_df["date"] == "2020-02-01", "value"]
-            if baseline.empty or pd.isna(baseline.iloc[0]):
-                st.warning("No baseline value found for Bay Area (Feb 2020).")
-                return None
-
-            baseline_value = baseline.iloc[0]
-            merged_df["pct_change"] = (merged_df["value"] / baseline_value - 1) * 100
-
-            return merged_df
-
-        except Exception as e:
-            st.error(f"Failed to fetch Bay Area BLS data: {e}")
-            return None
-        
-
-    @st.cache_data(ttl=86400)
-    def fetch_sonoma_payroll_data():
-        """
-        SONOMA COUNTY ONLY
-        """
-
-        series_ids = [
-            "SMS06422200000000001"  # Santa Rosa-Petaluma MSA  
-        ]
-
-        payload = {
-            "seriesid": series_ids,
-            "startyear": "2020",
-            "endyear": str(datetime.now().year),
-            "registrationKey": BLS_API_KEY
-        }
-
-        try:
-            response = requests.post(
-                "https://api.bls.gov/publicAPI/v2/timeseries/data/",
-                json=payload, timeout=30
-            )
-            data = response.json()
-            if "Results" not in data or "series" not in data["Results"]:
-                st.error("BLS API error: No results returned.")
-                return None
-
-            all_series = []
-            for series in data["Results"]["series"]:
-                if not series["data"]:
-                    st.warning(f"No data found for series ID: {series['seriesID']}")
-                    continue
-                try:
-                    df = pd.DataFrame(series["data"])
-                    df = df[df["period"] != "M13"]  # Exclude annual average rows
-                    df["date"] = pd.to_datetime(df["year"] + df["periodName"], format="%Y%B", errors="coerce")
-
-                    df["value"] = pd.to_numeric(df["value"], errors="coerce") * 1000
-                    df = df[["date", "value"]].sort_values("date")
-                    all_series.append(df)
-                except Exception as e:
-                    st.warning(f"Error processing series {series['seriesID']}: {e}")
-
-            if not all_series:
-                st.error("No Sonoma payroll data could be processed.")
-                return None
-
-            # Merge all series on date by summing values
-            merged_df = all_series[0].copy()
-            for other_df in all_series[1:]:
-                merged_df = pd.merge(merged_df, other_df, on="date", how="outer", suffixes=("", "_x"))
-
-                # If multiple columns named 'value', sum and clean
-                value_cols = [col for col in merged_df.columns if "value" in col]
-                merged_df["value"] = merged_df[value_cols].sum(axis=1, skipna=True)
-                merged_df = merged_df[["date", "value"]]
-
-            merged_df = merged_df.sort_values("date")
-
-            # Baseline = Feb 2020
-            baseline = merged_df.loc[merged_df["date"] == "2020-02-01", "value"]
-            if baseline.empty or pd.isna(baseline.iloc[0]):
-                st.warning("No baseline value found for Sonoma (Feb 2020).")
-                return None
-
-            baseline_value = baseline.iloc[0]
-            merged_df["pct_change"] = (merged_df["value"] / baseline_value - 1) * 100
-
-            return merged_df
-
-        except Exception as e:
-            st.error(f"Failed to fetch Sonoma BLS data: {e}")
-            return None
-        
-    @st.cache_data(ttl=86400)
-    def fetch_napa_payroll_data():
-        """
-        NAPA COUNTY ONLY
-        """
-
-        series_ids = [
-            "SMS06349000000000001"  # Napa MSA
-        ]
-
-        payload = {
-            "seriesid": series_ids,
-            "startyear": "2020",
-            "endyear": str(datetime.now().year),
-            "registrationKey": BLS_API_KEY
-        }
-
-        try:
-            response = requests.post(
-                "https://api.bls.gov/publicAPI/v2/timeseries/data/",
-                json=payload, timeout=30
-            )
-            data = response.json()
-            if "Results" not in data or "series" not in data["Results"]:
-                st.error("BLS API error: No results returned.")
-                return None
-
-            all_series = []
-            for series in data["Results"]["series"]:
-                if not series["data"]:
-                    st.warning(f"No data found for series ID: {series['seriesID']}")
-                    continue
-                try:
-                    df = pd.DataFrame(series["data"])
-                    df = df[df["period"] != "M13"]  # Exclude annual average rows
-                    df["date"] = pd.to_datetime(df["year"] + df["periodName"], format="%Y%B", errors="coerce")
-
-                    df["value"] = pd.to_numeric(df["value"], errors="coerce") * 1000
-                    df = df[["date", "value"]].sort_values("date")
-                    all_series.append(df)
-                except Exception as e:
-                    st.warning(f"Error processing series {series['seriesID']}: {e}")
-
-            if not all_series:
-                st.error("No Napa payroll data could be processed.")
-                return None
-
-            # Merge all series on date by summing values
-            merged_df = all_series[0].copy()
-            for other_df in all_series[1:]:
-                merged_df = pd.merge(merged_df, other_df, on="date", how="outer", suffixes=("", "_x"))
-
-                # If multiple columns named 'value', sum and clean
-                value_cols = [col for col in merged_df.columns if "value" in col]
-                merged_df["value"] = merged_df[value_cols].sum(axis=1, skipna=True)
-                merged_df = merged_df[["date", "value"]]
-
-            merged_df = merged_df.sort_values("date")
-
-            # Baseline = Feb 2020
-            baseline = merged_df.loc[merged_df["date"] == "2020-02-01", "value"]
-            if baseline.empty or pd.isna(baseline.iloc[0]):
-                st.warning("No baseline value found for Sonoma (Feb 2020).")
-                return None
-
-            baseline_value = baseline.iloc[0]
-            merged_df["pct_change"] = (merged_df["value"] / baseline_value - 1) * 100
-
-            return merged_df
-
-        except Exception as e:
-            st.error(f"Failed to fetch Sonoma BLS data: {e}")
-            return None
-        
-
-    @st.cache_data(ttl=86400)
-    def fetch_california_payroll_data():
-        """
-        Fetches seasonally adjusted total nonfarm payroll employment for California
-        (BLS series: SMS06000000000000001), computes percent change since Feb 2020.
-
-        Returns:
-            DataFrame with columns: ['date', 'value', 'pct_change']
-            or None on failure.
-        """
-        SERIES_ID = "SMS06000000000000001"  # CA total nonfarm, SA
-        payload = {
-            "seriesid": [SERIES_ID],
-            "startyear": "2020",
-            "endyear": str(datetime.now().year),
-            "registrationKey": BLS_API_KEY,
-        }
-
-        try:
-            resp = requests.post(
-                "https://api.bls.gov/publicAPI/v2/timeseries/data/",
-                json=payload,
-                timeout=30,
-            )
-            data = resp.json()
-            if "Results" not in data or not data["Results"].get("series"):
-                st.error("No results returned from BLS for California.")
-                return None
-
-            series = data["Results"]["series"][0]["data"]
-            if not series:
-                st.error("Empty series for California.")
-                return None
-
-            df = pd.DataFrame(series)
-            df = df[df["period"] != "M13"]  # drop annual
-            # 'year' + 'periodName' (e.g., "2024" + "August")
-            df["date"] = pd.to_datetime(df["year"] + df["periodName"], format="%Y%B", errors="coerce")
-            # State/area payrolls are reported in thousands → scale to actual counts
-            df["value"] = pd.to_numeric(df["value"], errors="coerce") * 1000
-            df = df[["date", "value"]].dropna().sort_values("date")
-
-            if df.empty:
-                st.error("Parsed California dataframe is empty.")
-                return None
-
-            # Baseline: prefer exact Feb 2020, else first available >= Feb 2020, else first row
-            feb2020 = pd.to_datetime("2020-02-01")
-            baseline_series = df.loc[df["date"] == feb2020, "value"]
-            if baseline_series.empty:
-                after_feb = df[df["date"] >= feb2020]
-                if not after_feb.empty:
-                    baseline_val = after_feb.iloc[0]["value"]
-                else:
-                    baseline_val = df.iloc[0]["value"]
-            else:
-                baseline_val = baseline_series.iloc[0]
-
-            if baseline_val is None or baseline_val == 0:
-                st.error("Invalid baseline for California.")
-                return None
-
-            df["pct_change"] = (df["value"] / baseline_val - 1) * 100
-            return df
-
-        except Exception as e:
-            st.error(f"Failed to fetch California payroll data: {e}")
-            return None
-
-
-    @st.cache_data(ttl=86400)
-    def fetch_us_payroll_data():
-        """
-        Fetches and processes national-level seasonally adjusted nonfarm payroll employment data
-        for the United States from the U.S. Bureau of Labor Statistics (BLS) API.
-
-        Retrieves monthly total nonfarm employment counts from January 2020 to the latest available month. 
-        Calculates the percent change in employment relative to February 2020 (pre-pandemic baseline).
-
-        Returns:
-            pd.DataFrame or None: DataFrame with the following columns:
-                - 'date': pandas datetime object representing each month.
-                - 'value': Number of jobs (in actual counts, not thousands).
-                - 'pct_change': Percent change in employment since February 2020.
-            
-            Returns None if the API call fails or the required data is unavailable.
-        """
-
-        SERIES_ID = "CES0000000001"  # U.S. nonfarm payroll, seasonally adjusted
-        payload = {
-            "seriesid": [SERIES_ID],
-            "startyear": "2020",
-            "endyear": str(datetime.now().year),
-            "registrationKey": BLS_API_KEY
-        }
-
-        try:
-            response = requests.post(
-                "https://api.bls.gov/publicAPI/v2/timeseries/data/",
-                json=payload,
-                timeout=30
-            )
-            data = response.json()
-            if "Results" not in data:
-                st.error("No results returned from BLS for U.S.")
-                return None
-
-            series = data["Results"]["series"][0]["data"]
-            df = pd.DataFrame(series)
-            df = df[df["period"] != "M13"]
-            df["date"] = pd.to_datetime(df["year"] + df["periodName"], format="%Y%B", errors="coerce")
-            df["value"] = df["value"].astype(float) * 1000
-            df = df[["date", "value"]].sort_values("date")
-
-            baseline = df.loc[df["date"] == "2020-02-01", "value"].iloc[0]
-            df["pct_change"] = (df["value"] / baseline - 1) * 100
-
-            return df
-
-        except Exception as e:
-            st.error(f"Failed to fetch U.S. payroll data: {e}")
-            return None
-
-
-    @st.cache_data(ttl=86400)
-    def fetch_states_job_data(series_ids):
-        """
-        Fetches and processes monthly seasonally adjusted nonfarm payroll employment data 
-        for multiple U.S. states from the Bureau of Labor Statistics (BLS) API.
-
-        Handles API limitations by batching requests in chunks of 25 series IDs. 
-        For each state, calculates the percent change in employment relative to February 2020 (pre-pandemic baseline).
-        Associates each series ID with its corresponding state name using the provided `state_code_map`.
-
-        Args:
-            series_ids (list of str): List of BLS series IDs representing state-level nonfarm payroll data.
-
-        Returns:
-            pd.DataFrame or None: A concatenated DataFrame containing:
-                - 'date': pandas datetime object for each month.
-                - 'value': Number of jobs (in actual counts, not thousands).
-                - 'pct_change': Percent change in employment since February 2020.
-                - 'State': Name of the U.S. state corresponding to each series.
-            
-            Returns None if no data is successfully fetched or processed.
-        """
-
-        def chunk_list(lst, size):
-            return [lst[i:i+size] for i in range(0, len(lst), size)]
-
-        chunks = chunk_list(series_ids, 25)  # Safe limit per API docs
-        all_dfs = []
-        received_ids = set()
-
-        # Chunking API requests
-        for chunk in chunks:
-            payload = {
-                "seriesid": chunk,
-                "startyear": "2020",
-                "endyear": str(datetime.now().year),
-                "registrationKey": BLS_API_KEY
-            }
-
-            try:
-                response = requests.post(
-                    "https://api.bls.gov/publicAPI/v2/timeseries/data/",
-                    json=payload,
-                    timeout=30
-                )
-                data = response.json()
-                for series in data.get("Results", {}).get("series", []):
-                    sid = series["seriesID"]
-                    received_ids.add(sid)
-                    state_name = next((name for name, code in state_code_map.items() if code == sid), sid)
-                    if not series["data"]:
-                        st.warning(f"No data returned for {state_name}.")
-                        continue
-
-                    df = pd.DataFrame(series["data"])
-                    df = df[df["period"] != "M13"]
-                    df["date"] = pd.to_datetime(df["year"] + df["periodName"], format="%Y%B", errors="coerce")
-                    df["value"] = pd.to_numeric(df["value"], errors="coerce") * 1000
-                    df = df[["date", "value"]].sort_values("date")
-
-                    # Calculate percent change from February 2020
-                    baseline = df.loc[df["date"] == "2020-02-01", "value"]
-                    if not baseline.empty:
-                        df["pct_change"] = (df["value"] / baseline.iloc[0] - 1) * 100
-                        df["State"] = state_name
-                        all_dfs.append(df)
-
-            except Exception as e:
-                st.error(f"Error fetching chunk: {e}")
-
-        missing = set(series_ids) - received_ids
-        for sid in missing:
-            state_name = next((name for name, code in state_code_map.items() if code == sid), sid)
-            st.warning(f"BLS API did not return data for {state_name}.")
-
-        return pd.concat(all_dfs, ignore_index=True) if all_dfs else None
-    
-
-    # --- Data Processing ---
-
-
-    def process_unemployment_data(data):
-        """
-        Cleans and processes raw employment data from the CA Open Data Portal.
-
-        Filters dataset to include only Bay Area counties and seasonally adjusted county-level data.
-        Parses datetime column from available options. Renames key columns for clarity, sorts data,
-        removes duplicates, and filters records to include only data from Feb 2020 onwards.
-
-        Args:
-            data (list[dict]): Raw records returned from the CA Open Data API.
-
-        Returns:
-            pd.DataFrame or None: A cleaned DataFrame with columns ['County', 'LaborForce', 'Employment',
-            'UnemploymentRate', 'date'], or None if input data is invalid or no valid date column is found.    
-        """
-
-        if not data:
-            return None
-
-        df = pd.DataFrame(data)
-        df = df[(df["Area Type"] == "County") & (df["Area Name"].isin(bay_area_counties))]
-
-        if "Seasonally Adjusted" in df.columns:
-            df = df[df["Seasonally Adjusted"] == "Y"]
-
-        # Parse date column
-        for col in ["Date_Numeric", "Date", "Period", "Month", "Year"]:
-            if col in df.columns:
-                df["date"] = pd.to_datetime(df[col], format="%m/%Y", errors='coerce')
-                break
-        else:
-            st.error("No valid date column found.")
-            return None
-        
-        # Renaming column names
-        df = df.rename(columns={
-            "Area Name": "County",
-            "Labor Force": "LaborForce",
-            "Employment": "Employment",
-            "Unemployment Rate": "UnemploymentRate"
-        })
-
-        # Sort data by County names, then by date
-        df = df.sort_values(by=["County", "date"])
-        df = df.drop_duplicates(subset=["County", "date"], keep="first")
-        
-        # Filter for Feb 2020 and onwards
-        cutoff = datetime(2020, 2, 1)
-        df = df[df["date"] >= cutoff]
-
-        return df
-
 
     # --- Visualization ---
 
