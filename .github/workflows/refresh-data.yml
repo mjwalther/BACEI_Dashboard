@@ -72,10 +72,7 @@ jobs:
 #     runs-on: ubuntu-latest
 #     permissions:
 #       contents: write
-#     concurrency:
-#       group: refresh-data
-#       cancel-in-progress: true
-
+#
 #     steps:
 #       - uses: actions/checkout@v4
 
