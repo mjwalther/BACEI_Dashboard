@@ -36,6 +36,7 @@ if not BLS_API_KEY:
     st.error("Missing BLS_API_KEY. Set it as an environment variable or Streamlit secret.")
     st.stop()
 
+
 from pathlib import Path
 import json, time
 
@@ -113,8 +114,7 @@ def _write_artifacts(df, name: str, description: str | None = None):
 
 def build_all_tables():
     """
-    Reuse your existing fetching/processing functions to build the exact
-    DataFrames your charts need. Add/remove as needed.
+    Reuse existing fetching/processing functions to build the exact DataFrames the charts need.
     """
     tables = {}
 
@@ -171,7 +171,7 @@ def build_all_tables():
             unemp_df = process_unemployment_data(raw)
             if unemp_df is not None:
                 # _write_parquet(unemp_df, "unemployment_ca")
-                _write_artifacts(unemp_df, "unemployment_ca", "Unemployment Rates")
+                _write_artifacts(unemp_df, "unemployment_ca", "CA Open Data Portal Local Area Unemployment Statistics (Bay Area only)")
                 tables["unemployment_ca"] = unemp_df
     except Exception as e:
         st.warning(f"Build: failed unemployment_ca: {e}")
@@ -207,14 +207,18 @@ if os.getenv("DASHBOARD_BUILD") == "1":
 # === end PREBUILT SUPPORT ===
 
 
+
 def show_data_downloads():
-    st.subheader("Data Downloads")
-    import pandas as pd, requests
+    import pandas as pd, requests, os
     from io import StringIO
 
     def _csv_from_url(url: str) -> pd.DataFrame:
         r = requests.get(url, timeout=30); r.raise_for_status()
         return pd.read_csv(StringIO(r.text))
+
+    def _bytes_from_url(url: str) -> bytes:
+        r = requests.get(url, timeout=30); r.raise_for_status()
+        return r.content
 
     base = PREBUILT_BASE_URL
     # Fallback to local dev
@@ -234,15 +238,78 @@ def show_data_downloads():
             st.warning(f"Could not load manifest: {e}")
             return
 
-    for _, row in dfm.iterrows():
-        rel = str(row["file"])  # e.g., csv/bay_area_payroll.csv
+    # Simple search/filter
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        q = st.text_input("Search files or descriptions", "")
+    with col2:
+        # derive top-level folder from file path like "csv/employment/..."
+        folders = sorted({str(f).split("/", 2)[1] for f in dfm["file"] if isinstance(f, str) and f.startswith("csv/")})
+        folder = st.selectbox("Folder", ["(all)"] + folders)
+
+    df_show = dfm.copy()
+    if q:
+        ql = q.lower()
+        df_show = df_show[
+            df_show["file"].str.lower().str.contains(ql) |
+            df_show["description"].fillna("").str.lower().str.contains(ql)
+        ]
+    if folder != "(all)":
+        df_show = df_show[df_show["file"].str.contains(rf"^csv/{folder}/")]
+
+    if df_show.empty:
+        st.info("No matching files.")
+        return
+
+    for _, row in df_show.iterrows():
+        rel = str(row["file"])                  # e.g., "csv/employment/job_recovery_overall.csv"
         desc = str(row.get("description", "") or "")
-        link = (PAGES_OUT / rel) if not base else f"{base}/data_build/{rel}"
+        rows = int(row.get("rows", 0))
+        cols = int(row.get("columns", 0))
+        schema_json = str(row.get("schema_json", "[]"))
+
+        # Build URLs/paths
+        if base:
+            raw_url = f"{base}/data_build/{rel}"
+            data_bytes = None
+        else:
+            local_path = PAGES_OUT / rel
+            raw_url = str(local_path)
+            data_bytes = local_path.read_bytes() if local_path.exists() else None
+
         with st.expander(f"{rel} — {desc}"):
-            st.caption(f"Rows: {row['rows']} · Columns: {row['columns']}")
-            st.write(f"[Open raw CSV]({link})")
+            st.caption(f"Rows: {rows} · Columns: {cols}")
 
+            # Quick preview (first ~200 rows), best-effort
+            try:
+                if base:
+                    # Avoid downloading twice: read once for preview, reuse for button
+                    text = requests.get(raw_url, timeout=30)
+                    text.raise_for_status()
+                    csv_text = text.text
+                    data_bytes = csv_text.encode("utf-8")
+                    df_preview = pd.read_csv(StringIO(csv_text)).head(200)
+                else:
+                    df_preview = pd.read_csv(raw_url).head(200)
+                st.dataframe(df_preview, use_container_width=True)
+            except Exception as e:
+                st.info(f"Preview unavailable: {e}")
 
+            # (Optional) show schema from manifest
+            if schema_json and schema_json != "[]":
+                st.code(schema_json, language="json")
+
+            # Download button (serves exact file bytes)
+            filename = rel.split("/", 1)[1] if "/" in rel else rel  # drop leading "csv/"
+            if data_bytes:
+                st.download_button(
+                    label="Download CSV",
+                    data=data_bytes,
+                    file_name=filename,
+                    mime="text/csv",
+                )
+
+            st.markdown(f"[Open raw CSV]({raw_url})")
 
 
 # --- Title ----
@@ -297,6 +364,7 @@ section = st.sidebar.selectbox(
     ["Employment", "Population", "Housing", "Investment", "Transit"]
 )
 
+
 # --- Sidebar Subtabs ---
 subtab = None
 if section == "Employment":
@@ -305,6 +373,28 @@ if section == "Employment":
         ["Employment", "Unemployment", "Job Recovery", "Monthly Change", "Industry", "Office Sector", "Jobs Ratio"],
         key="employment_subtab"
     )
+
+
+# --- Bottom-of-sidebar "Download Data" button ---
+st.sidebar.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)  # breathing room
+if st.sidebar.button("Download Data", use_container_width=True):
+    st.query_params["page"] = "downloads"
+    st.rerun()
+
+
+is_downloads = (st.query_params.get("page") == "downloads")
+if is_downloads:
+    st.markdown("### Download Data")
+
+    if st.button("← Back", type="secondary"):
+        qp = st.query_params
+        if "page" in qp:
+            del qp["page"]
+        st.rerun()
+
+    show_data_downloads()
+    st.stop()
+
 
 # --- Main Content ---
 if section == "Employment":
@@ -683,6 +773,76 @@ if section == "Employment":
             st.error(f"Failed to fetch Sonoma BLS data: {e}")
             return None
         
+
+    @st.cache_data(ttl=86400)
+    def fetch_california_payroll_data():
+        """
+        Fetches seasonally adjusted total nonfarm payroll employment for California
+        (BLS series: SMS06000000000000001), computes percent change since Feb 2020.
+
+        Returns:
+            DataFrame with columns: ['date', 'value', 'pct_change']
+            or None on failure.
+        """
+        SERIES_ID = "SMS06000000000000001"  # CA total nonfarm, SA
+        payload = {
+            "seriesid": [SERIES_ID],
+            "startyear": "2020",
+            "endyear": str(datetime.now().year),
+            "registrationKey": BLS_API_KEY,
+        }
+
+        try:
+            resp = requests.post(
+                "https://api.bls.gov/publicAPI/v2/timeseries/data/",
+                json=payload,
+                timeout=30,
+            )
+            data = resp.json()
+            if "Results" not in data or not data["Results"].get("series"):
+                st.error("No results returned from BLS for California.")
+                return None
+
+            series = data["Results"]["series"][0]["data"]
+            if not series:
+                st.error("Empty series for California.")
+                return None
+
+            df = pd.DataFrame(series)
+            df = df[df["period"] != "M13"]  # drop annual
+            # 'year' + 'periodName' (e.g., "2024" + "August")
+            df["date"] = pd.to_datetime(df["year"] + df["periodName"], format="%Y%B", errors="coerce")
+            # State/area payrolls are reported in thousands → scale to actual counts
+            df["value"] = pd.to_numeric(df["value"], errors="coerce") * 1000
+            df = df[["date", "value"]].dropna().sort_values("date")
+
+            if df.empty:
+                st.error("Parsed California dataframe is empty.")
+                return None
+
+            # Baseline: prefer exact Feb 2020, else first available >= Feb 2020, else first row
+            feb2020 = pd.to_datetime("2020-02-01")
+            baseline_series = df.loc[df["date"] == feb2020, "value"]
+            if baseline_series.empty:
+                after_feb = df[df["date"] >= feb2020]
+                if not after_feb.empty:
+                    baseline_val = after_feb.iloc[0]["value"]
+                else:
+                    baseline_val = df.iloc[0]["value"]
+            else:
+                baseline_val = baseline_series.iloc[0]
+
+            if baseline_val is None or baseline_val == 0:
+                st.error("Invalid baseline for California.")
+                return None
+
+            df["pct_change"] = (df["value"] / baseline_val - 1) * 100
+            return df
+
+        except Exception as e:
+            st.error(f"Failed to fetch California payroll data: {e}")
+            return None
+
 
     @st.cache_data(ttl=86400)
     def fetch_us_payroll_data():
@@ -1257,6 +1417,161 @@ if section == "Employment":
                 'Maximum Rate (%)': st.column_config.TextColumn('Maximum Rate', width='medium')
             }
         )
+
+
+    def show_job_recovery_overall_v2(df_ca, df_bay, df_us, df_sonoma):
+        """
+        Show four lines: California, United States, Sonoma County, and Rest of Bay Area (Bay - Sonoma).
+        Expects:
+        - df_ca, df_us: columns ['date','pct_change'] (value optional)
+        - df_bay, df_sonoma: MUST include ['date','value'] (and optionally 'pct_change')
+        """
+        # ---- Basic validation ----
+        required_min = {
+            "California": ["date", "pct_change"],
+            "United States": ["date", "pct_change"],
+            "Bay Area": ["date", "value"],        # need value to compute Rest of Bay
+            "Sonoma County": ["date", "value"],   # need value to compute Rest of Bay
+        }
+        name_map = {
+            "California": df_ca,
+            "United States": df_us,
+            "Bay Area": df_bay,
+            "Sonoma County": df_sonoma,
+        }
+
+        for n, d in name_map.items():
+            if d is None or d.empty:
+                st.warning(f"{n} dataframe is missing or empty.")
+                return
+            if not set(required_min[n]).issubset(d.columns):
+                st.warning(f"{n} is missing required columns {required_min[n]}.")
+                return
+
+        # ---- Align to latest common month across the four inputs ----
+        latest_common_date = min(d["date"].max() for d in name_map.values())
+        df_ca = df_ca[df_ca["date"] <= latest_common_date].copy()
+        df_us = df_us[df_us["date"] <= latest_common_date].copy()
+        df_bay = df_bay[df_bay["date"] <= latest_common_date].copy()
+        df_sonoma = df_sonoma[df_sonoma["date"] <= latest_common_date].copy()
+
+        # ---- Build Rest of Bay Area = Bay - Sonoma (values), then pct_change vs Feb 2020 ----
+        m_rb = (
+            df_bay[["date", "value"]].rename(columns={"value": "bay_value"})
+            .merge(df_sonoma[["date", "value"]].rename(columns={"value": "sonoma_value"}), on="date", how="inner")
+            .sort_values("date")
+        )
+        m_rb["value"] = m_rb["bay_value"] - m_rb["sonoma_value"]
+
+        feb2020 = pd.to_datetime("2020-02-01")
+        base_rb = m_rb.loc[m_rb["date"] == feb2020, "value"]
+        if base_rb.empty:
+            after_feb = m_rb[m_rb["date"] >= feb2020]
+            baseline_val = after_feb.iloc[0]["value"] if not after_feb.empty else m_rb.iloc[0]["value"]
+        else:
+            baseline_val = base_rb.iloc[0]
+
+        if baseline_val is None or baseline_val == 0:
+            st.warning("Invalid baseline for Rest of Bay Area; skipping this line.")
+            df_rest_bay = None
+        else:
+            m_rb["pct_change"] = (m_rb["value"] / baseline_val - 1) * 100
+            df_rest_bay = m_rb[["date", "value", "pct_change"]].copy()
+
+        # ---- Plot ----
+        fig = go.Figure()
+        fig.add_hline(y=0, line_dash="solid", line_color="#000000", line_width=1, opacity=1.0)
+
+        def add_line(df, name, color, text_pos="bottom center", marker_size=10, font_size=10):
+            fig.add_trace(
+                go.Scatter(
+                    x=df["date"], y=df["pct_change"], mode="lines", name=name,
+                    line=dict(color=color),
+                    hovertemplate=f"{name}: "+"%{y:.2f}%<extra></extra>",
+                )
+            )
+            last = df.iloc[-1]
+            fig.add_trace(
+                go.Scatter(
+                    x=[last["date"]], y=[last["pct_change"]],
+                    mode="markers+text",
+                    marker=dict(color=color, size=marker_size),
+                    text=[f"{last['pct_change']:.2f}%"],
+                    textposition=text_pos,
+                    textfont=dict(size=font_size, family="Avenir", color=color),
+                    name=name, hoverinfo="skip", showlegend=False,
+                )
+            )
+
+        # Colors
+        add_line(df_us,        "United States",    "#7e8082", "top center", marker_size=10, font_size=23)
+        add_line(df_ca,        "California",       "#00aca2", "bottom center", marker_size=10, font_size=23)
+        add_line(df_sonoma,    "Sonoma County",    "#d84f19", "bottom center", marker_size=10, font_size=23)
+        if df_rest_bay is not None and not df_rest_bay.empty:
+            add_line(df_rest_bay, "Rest of Bay Area", "#406a9c", "top center", marker_size=10, font_size=23)
+
+        # Quarterly ticks (Jan/Apr/Jul/Oct)
+        series_for_ticks = [df_ca["date"], df_us["date"], df_sonoma["date"]]
+        if df_rest_bay is not None:
+            series_for_ticks.append(df_rest_bay["date"])
+        all_dates = pd.concat(series_for_ticks)
+        quarterly_ticks = sorted(all_dates[all_dates.dt.month.isin([1, 4, 7, 10])].unique())
+        ticktext = [d.strftime("%b<br>%Y") if d.month == 1 else d.strftime("%b") for d in quarterly_ticks]
+
+        # Avoid clipping end labels
+        for i, tr in enumerate(fig.data):
+            if getattr(tr, "mode", None) and "text" in tr.mode:
+                fig.data[i].update(cliponaxis=False)
+
+        latest_date = latest_common_date
+        fig.update_layout(
+            title=dict(
+                text=(
+                    "<span style='font-size:20px; font-family:Avenir Black'>Job Recovery Since the Pandemic</span><br>"
+                    "<span style='font-size:17px; color:#666; font-family:Avenir Medium'>"
+                    "Percent Change in Non-Farm Payroll Jobs From February 2020 to "
+                    + latest_date.strftime('%B %Y') + "</span>"
+                ),
+                x=0.5, xanchor='center'
+            ),
+            xaxis=dict(
+                title='Date',
+                title_font=dict(family="Avenir Medium", size=18, color="black"),
+                tickfont=dict(family="Avenir", size=22, color="black"),
+                tickvals=quarterly_ticks,
+                ticktext=ticktext,
+                dtick="M1",
+                range=["2020-02-01", (latest_date + timedelta(days=90)).strftime("%Y-%m-%d")],
+            ),
+            yaxis=dict(
+                title='Percent Change Since Feb 2020',
+                ticksuffix="%",
+                title_font=dict(family="Avenir Medium", size=18, color="black"),
+                tickfont=dict(family="Avenir", size=25, color="black"),
+                showgrid=True, gridcolor="#CCCCCC", gridwidth=1, griddash="dash"
+            ),
+            hovermode="x unified",
+            legend=dict(
+                title=dict(text="Region", font=dict(family="Avenir Black", size=18, color="black")),
+                font=dict(family="Avenir", size=20, color="black"),
+                orientation="v", x=1.01, y=1
+            ),
+        )
+        fig.update_xaxes(hoverformat="%b")
+
+        st.plotly_chart(
+            fig,
+            use_container_width=True,
+            config={"toImageButtonOptions": {"format": "png", "filename": "job_recovery", "scale": 5}}
+        )
+
+        st.markdown("""
+        <div style='font-size: 12px; color: #666;'>
+        <strong>Source:</strong> Bureau of Labor Statistics (BLS). <strong>Note:</strong> Data are seasonally adjusted.<br>
+        <strong>Analysis:</strong> Bay Area Council Economic Institute.<br>
+        </div>
+        """, unsafe_allow_html=True)
+        st.markdown("---")
 
 
 
@@ -3495,7 +3810,7 @@ if section == "Employment":
         df_us = load_prebuilt_or_fetch("us_payroll", fetch_us_payroll_data)
         df_sonoma = load_prebuilt_or_fetch("sonoma_payroll", fetch_sonoma_payroll_data)
         df_napa = load_prebuilt_or_fetch("napa_payroll", fetch_napa_payroll_data)
-
+        df_ca = load_prebuilt_or_fetch("california_payroll", fetch_california_payroll_data)
 
         if subtab == "Employment":
             if df_unemp is not None:
@@ -3510,9 +3825,11 @@ if section == "Employment":
                 st.warning("Unemployment dataset is unavailable right now.")
 
         elif subtab == "Job Recovery":
-            # show_job_recovery_overall(df_states, df_bay, df_us, df_sonoma, df_napa)
             show_job_recovery_overall(df_rest_ca, df_bay, df_us, df_sonoma, df_napa)
             show_job_recovery_by_state(state_code_map, fetch_states_job_data)
+
+            # --- Sonoma County Outlook ---
+            # show_job_recovery_overall_v2(df_ca=df_ca, df_bay=df_bay, df_us=df_us, df_sonoma=df_sonoma)
 
         elif subtab == "Monthly Change":
             
