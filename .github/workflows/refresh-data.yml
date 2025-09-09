@@ -1,4 +1,5 @@
 name: Refresh dashboard data
+
 on:
   schedule:
     - cron: "0 * * * *" # hourly UTC
@@ -9,8 +10,23 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+
+    # Prevent overlapping hourly runs from clobbering each other
+    concurrency:
+      group: refresh-data
+      cancel-in-progress: true
+
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      # Always start from the latest main to avoid merge conflicts in generated files
+      - name: Sync to latest main
+        run: |
+          git fetch origin
+          git reset --hard origin/main
 
       - uses: actions/setup-python@v5
         with:
@@ -21,19 +37,70 @@ jobs:
           pip install -r requirements.txt
           pip install pyarrow
 
+      # Build writes docs/data_build/*.csv, manifest.csv, version.json and exits
       - name: Build data artifacts
         env:
           DASHBOARD_BUILD: "1"
           BLS_API_KEY: ${{ secrets.BLS_API_KEY }}
-          PREBUILT_BASE_URL: https://github.com/mjwalther/BACEI_Dashboard
-        run: |
-          cd $GITHUB_WORKSPACE
-          python scripts/build_artifacts.py
+        run: python scripts/build_artifacts.py
 
+      # Quick sanity check in logs (optional)
+      - name: Show manifest preview
+        run: |
+          echo "Top of docs/data_build/manifest.csv:"
+          head -n 10 docs/data_build/manifest.csv || true
+          echo "Version file:"
+          cat docs/data_build/version.json || true
+
+      # Commit & push all changes, including renames/deletions
       - name: Commit updated artifacts to Pages folder
         run: |
-          git config user.name "github-actions[bot]"
+          git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/data_build/*
+          git add -A docs/data_build
           git commit -m "chore(data): refresh artifacts [skip ci]" || echo "No changes to commit"
-          git push
+          git push origin HEAD:main
+
+# name: Refresh dashboard data
+# on:
+#   schedule:
+#     - cron: "0 * * * *" # hourly UTC
+#   workflow_dispatch:
+
+# jobs:
+#   build-data:
+#     runs-on: ubuntu-latest
+#     permissions:
+#       contents: write
+#     concurrency:
+#       group: refresh-data
+#       cancel-in-progress: true
+
+#     steps:
+#       - uses: actions/checkout@v4
+
+#       - uses: actions/setup-python@v5
+#         with:
+#           python-version: "3.11"
+
+#       - name: Install deps
+#         run: |
+#           pip install -r requirements.txt
+#           pip install pyarrow
+
+#       - name: Build data artifacts
+#         env:
+#           DASHBOARD_BUILD: "1"
+#           BLS_API_KEY: ${{ secrets.BLS_API_KEY }}
+#           PREBUILT_BASE_URL: https://github.com/mjwalther/BACEI_Dashboard
+#         run: |
+#           cd $GITHUB_WORKSPACE
+#           python scripts/build_artifacts.py
+
+#       - name: Commit updated artifacts to Pages folder
+#         run: |
+#           git config user.name "github-actions[bot]"
+#           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+#           git add docs/data_build/*
+#           git commit -m "chore(data): refresh artifacts [skip ci]" || echo "No changes to commit"
+#           git push
