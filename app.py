@@ -9,9 +9,12 @@ import plotly.express as px
 import plotly.io as pio
 import plotly.graph_objects as go
 import os
+import json, time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+from pathlib import Path
 from data_mappings import state_code_map, series_mapping, bay_area_counties, regions, office_metros_mapping, rename_mapping, color_map, sonoma_mapping, us_series_mapping
+series_mapping.setdefault("states", state_code_map)
 
 try:
     from dotenv import load_dotenv
@@ -27,8 +30,6 @@ def _warn(msg):
         print(f"[build warning] {msg}")
     else:
         st.warning(msg)
-
-
 
 def get_secret(name: str) -> str | None:
     val = os.getenv(name)
@@ -46,10 +47,6 @@ PREBUILT_BASE_URL = get_secret("PREBUILT_BASE_URL")
 if not BLS_API_KEY:
     st.error("Missing BLS_API_KEY. Set it as an environment variable or Streamlit secret.")
     st.stop()
-
-
-from pathlib import Path
-import json, time
 
 PAGES_OUT = Path("docs/data_build")
 PAGES_OUT.mkdir(parents=True, exist_ok=True)
@@ -75,7 +72,6 @@ def _write_version():
         "last_updated_unix": int(time.time()),
         "last_updated_utc": pd.Timestamp.utcnow().isoformat()
     }), encoding="utf-8")
-
 
 
 # === CSV + Manifest support ===
@@ -120,7 +116,6 @@ def _write_artifacts(df, name: str, description: str | None = None):
     _write_csv(df, name)
     _manifest_add(df, name, description)
 # === end CSV + Manifest support ===
-
 
 
 def build_all_tables():
@@ -174,19 +169,18 @@ def build_all_tables():
     except Exception as e:
         _warn(f"Build: failed us_payroll: {e}")
 
+
     try:
         state_series_ids = list(series_mapping.get("states", {}).values()) if isinstance(series_mapping.get("states", {}), dict) else []
         if state_series_ids:
             states_df = fetch_states_job_data(state_series_ids)
             if states_df is not None:
-                # _write_parquet(states_df, "states_jobs")
-                _write_artifacts(states_df, "states_jobs", "Jobs by States")
-                tables["states_jobs"] = states_df
+                _write_artifacts(states_df, "states_payroll", "States Non-Farm Payroll Employment by Month")
+                tables["states_payroll"] = states_df
     # except Exception as e:
-    #     st.warning(f"Build: failed states_jobs: {e}")
-
+    #     st.warning(f"Build: failed states_payroll: {e}")
     except Exception as e:
-        _warn(f"Build: failed states_jobs: {e}")
+        _warn(f"Build: failed states_payroll: {e}")
 
     try:
         raw = fetch_unemployment_data()
@@ -857,6 +851,69 @@ def process_unemployment_data(data):
 
     return df
 
+def fetch_and_process_job_data(series_id, region_name):
+    """
+    Fetches nonfarm payroll employment data from the BLS API for a specific region 
+    and processes it to compute monthly job change.
+
+    The function:
+        - Sends a POST request to the BLS Public API for a given series ID.
+        - Filters out annual summary rows (M13).
+        - Converts data to monthly values in thousands of jobs.
+        - Calculates month-over-month job changes.
+        - Formats labels and assigns color codes for visualization (teal for gains, red for losses).
+
+    Args:
+        series_id (str): The BLS series ID for the selected region.
+        region_name (str): Human-readable name of the region (for warnings or error messages).
+
+    Returns:
+        pd.DataFrame or None: A DataFrame containing:
+            - 'date': Month and year as datetime.
+            - 'value': Total employment.
+            - 'monthly_change': Change in employment from previous month.
+            - 'label': String label for bar chart display (e.g., "5K" or "250").
+            - 'color': Color code for visualization (teal for gains, red for losses).
+        Returns None if data is unavailable or the API call fails.
+    """
+    
+    payload = {
+        "seriesid": [series_id],
+        "startyear": "2020",
+        "endyear": str(datetime.now().year),
+        "registrationKey": BLS_API_KEY
+    }
+
+    try:
+        response = requests.post("https://api.bls.gov/publicAPI/v2/timeseries/data/", json=payload, timeout=30)
+        data = response.json()
+
+        if "Results" in data and data["Results"]["series"]:
+            series = data["Results"]["series"][0]["data"]
+            df = pd.DataFrame(series)
+            df = df[df["period"] != "M13"]  # Remove annual data
+            df["date"] = pd.to_datetime(df["year"] + df["periodName"], format="%Y%B", errors="coerce")
+            df["value"] = pd.to_numeric(df["value"], errors="coerce") * 1000
+            df = df.sort_values("date")
+            df = df[df["date"] >= "2020-01-01"]     # Start date of employment job data
+            df["monthly_change"] = df["value"].diff()
+            df = df.dropna(subset=["monthly_change"])
+            
+            # Add formatting and color columns
+            df["label"] = df["monthly_change"].apply(
+                lambda x: f"{int(x/1000)}K" if abs(x) >= 1000 else f"{int(x)}"
+            )
+            df["color"] = df["monthly_change"].apply(lambda x: "#00aca2" if x >= 0 else "#e63946")
+            
+            return df
+        else:
+            st.warning(f"No data returned from BLS for {region_name}.")
+            return None
+            
+    except Exception as e:
+        st.error(f"Failed to fetch data for {region_name}: {e}")
+        return None
+
 
 
 
@@ -904,6 +961,29 @@ def show_data_downloads():
             st.warning(f"Could not load manifest: {e}")
             return
 
+    # df_states = None
+    # try:
+    #     df_states = load_prebuilt_or_fetch(
+    #         "states_payroll",
+    #         lambda: fetch_states_job_data(list(series_mapping.get("states", {}).values()))
+    #     )
+    # except Exception as e:
+    #     st.info(f"State jobs dataset unavailable: {e}")
+
+    # if df_states is not None and not df_states.empty:
+    #     with st.expander("State Job Recovery (df_states)"):
+    #         st.caption(f"Rows: {len(df_states)} · Columns: {len(df_states.columns)}")
+    #         st.dataframe(df_states.head(200), use_container_width=True)
+
+    #         # Offer CSV download
+    #         _csv = df_states.to_csv(index=False).encode("utf-8")
+    #         st.download_button(
+    #             label="Download df_states as CSV",
+    #             data=_csv,
+    #             file_name="states_jobs.csv",
+    #             mime="text/csv"
+    #         )
+
     # Simple search/filter
     col1, col2 = st.columns([2, 1])
     with col1:
@@ -926,6 +1006,8 @@ def show_data_downloads():
     if df_show.empty:
         st.info("No matching files.")
         return
+    
+    df_show = df_show.sort_values(["file"]).reset_index(drop=True)
 
     for _, row in df_show.iterrows():
         rel = str(row["file"])                  # e.g., "csv/employment/job_recovery_overall.csv"
@@ -1027,7 +1109,7 @@ st.sidebar.image("BACEI Logo.png", use_container_width=True)
 # --- Sidebar dropdown ---
 section = st.sidebar.selectbox(
     "Select Indicator:",
-    ["Employment", "Population", "Housing", "Investment", "Transit"]
+    ["Employment", "Population", "Housing"]  #, "Investment", "Transit"]
 )
 
 
@@ -2134,70 +2216,6 @@ if section == "Employment":
             <strong>Analysis:</strong> Bay Area Council Economic Institute.<br>
             </div>
             """, unsafe_allow_html=True)
-
-
-    def fetch_and_process_job_data(series_id, region_name):
-        """
-        Fetches nonfarm payroll employment data from the BLS API for a specific region 
-        and processes it to compute monthly job change.
-
-        The function:
-            - Sends a POST request to the BLS Public API for a given series ID.
-            - Filters out annual summary rows (M13).
-            - Converts data to monthly values in thousands of jobs.
-            - Calculates month-over-month job changes.
-            - Formats labels and assigns color codes for visualization (teal for gains, red for losses).
-
-        Args:
-            series_id (str): The BLS series ID for the selected region.
-            region_name (str): Human-readable name of the region (for warnings or error messages).
-
-        Returns:
-            pd.DataFrame or None: A DataFrame containing:
-                - 'date': Month and year as datetime.
-                - 'value': Total employment.
-                - 'monthly_change': Change in employment from previous month.
-                - 'label': String label for bar chart display (e.g., "5K" or "250").
-                - 'color': Color code for visualization (teal for gains, red for losses).
-            Returns None if data is unavailable or the API call fails.
-        """
-        
-        payload = {
-            "seriesid": [series_id],
-            "startyear": "2020",
-            "endyear": str(datetime.now().year),
-            "registrationKey": BLS_API_KEY
-        }
-
-        try:
-            response = requests.post("https://api.bls.gov/publicAPI/v2/timeseries/data/", json=payload, timeout=30)
-            data = response.json()
-
-            if "Results" in data and data["Results"]["series"]:
-                series = data["Results"]["series"][0]["data"]
-                df = pd.DataFrame(series)
-                df = df[df["period"] != "M13"]  # Remove annual data
-                df["date"] = pd.to_datetime(df["year"] + df["periodName"], format="%Y%B", errors="coerce")
-                df["value"] = pd.to_numeric(df["value"], errors="coerce") * 1000
-                df = df.sort_values("date")
-                df = df[df["date"] >= "2020-01-01"]     # Start date of employment job data
-                df["monthly_change"] = df["value"].diff()
-                df = df.dropna(subset=["monthly_change"])
-                
-                # Add formatting and color columns
-                df["label"] = df["monthly_change"].apply(
-                    lambda x: f"{int(x/1000)}K" if abs(x) >= 1000 else f"{int(x)}"
-                )
-                df["color"] = df["monthly_change"].apply(lambda x: "#00aca2" if x >= 0 else "#e63946")
-                
-                return df
-            else:
-                st.warning(f"No data returned from BLS for {region_name}.")
-                return None
-                
-        except Exception as e:
-            st.error(f"Failed to fetch data for {region_name}: {e}")
-            return None
 
 
     def create_monthly_job_change_chart(df, region_name):
@@ -3821,6 +3839,9 @@ if section == "Employment":
         st.dataframe(styled_summary, use_container_width=True, hide_index=True)
 
 
+
+
+
     # --- Main Dashboard Block ---
 
     if section == "Employment":
@@ -3834,7 +3855,7 @@ if section == "Employment":
 
         # Employment data for states, Bay Area, and the United States
         df_states = load_prebuilt_or_fetch(
-            "states_jobs",
+            "states_payroll",
             lambda: fetch_states_job_data(list(series_mapping.get("states", {}).values()))
         )
         
@@ -3931,13 +3952,13 @@ if section == "Employment":
         st.header("Housing")
         st.write("Placeholder: housing graphs, charts, and tables.")
 
-    elif section == "Investment":
-        st.header("Investment")
-        st.write("Placeholder: investment graphs, charts, and tables.")
+    # elif section == "Investment":
+    #     st.header("Investment")
+    #     st.write("Placeholder: investment graphs, charts, and tables.")
 
-    elif section == "Transit":
-        st.header("Transit")
-        st.write("Placeholder: transit graphs, charts, and tables.")
+    # elif section == "Transit":
+    #     st.header("Transit")
+    #     st.write("Placeholder: transit graphs, charts, and tables.")
 
 
 st.markdown("---")
