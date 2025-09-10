@@ -13,7 +13,7 @@ import json, time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from pathlib import Path
-from data_mappings import state_code_map, series_mapping, bay_area_counties, regions, office_metros_mapping, rename_mapping, color_map, sonoma_mapping, us_series_mapping
+from data_mappings import state_code_map, series_mapping, series_mapping_v2, bay_area_counties, regions, office_metros_mapping, rename_mapping, color_map, sonoma_mapping, us_series_mapping
 series_mapping.setdefault("states", state_code_map)
 
 try:
@@ -195,6 +195,25 @@ def build_all_tables():
 
     except Exception as e:
         _warn(f"Build: failed LAUS_Bay_Area: {e}")
+
+    try:
+        df_bay = _compute_industry_export_for_region(series_mapping, BLS_API_KEY)
+        df_us  = _compute_industry_export_for_region(us_series_mapping, BLS_API_KEY)
+
+        combined = pd.concat([df_bay, df_us], ignore_index=True) if not df_bay.empty or not df_us.empty else pd.DataFrame()
+
+        if combined is not None and not combined.empty:
+            _write_artifacts(
+                combined,
+                "industry_job_recovery",
+                "Industry-level job recovery for Bay Area and U.S."
+            )
+            tables["industry_job_recovery"] = combined
+        else:
+            _warn("Build: industry_job_recovery produced no rows.")
+    except Exception as e:
+        _warn(f"Build: failed industry_job_recovery: {e}")
+
 
     _write_manifest()
     _write_version()
@@ -913,8 +932,142 @@ def fetch_and_process_job_data(series_id, region_name):
     except Exception as e:
         st.error(f"Failed to fetch data for {region_name}: {e}")
         return None
+    
+def _fetch_bls_series_chunked(series_ids: list[str], start_year: int, end_year: int, api_key: str):
+    """Fetch BLS timeseries in chunks of 25 (public API limit). Returns list of series dicts."""
+    import requests, math
+    all_series = []
+    for i in range(0, len(series_ids), 25):
+        chunk = series_ids[i:i+25]
+        payload = {
+            "seriesid": chunk,
+            "startyear": str(start_year),
+            "endyear": str(end_year),
+            "registrationKey": api_key,
+        }
+        try:
+            resp = requests.post("https://api.bls.gov/publicAPI/v2/timeseries/data/",
+                                 json=payload, timeout=30)
+            data = resp.json()
+            if "Results" in data and "series" in data["Results"]:
+                all_series.extend(data["Results"]["series"])
+        except Exception as e:
+            _warn(f"BLS fetch failed for chunk {i//25+1}: {e}")
+    return all_series
 
+def _compute_industry_export_for_region(mapping: dict[str, tuple[str, str]], api_key: str):
+    """
+    Given a mapping: series_id -> (region, industry), fetch BLS data and return a tidy DataFrame
+    for BOTH windows: since Feb 2020 and past 12 months. Drops TTU and adds derived WT&U.
+    Columns: region, industry, metric_window, baseline_date, latest_date,
+             baseline_jobs, latest_jobs, net_change, pct_change
+    """
+    import pandas as pd
+    from datetime import datetime
 
+    if not mapping:
+        return pd.DataFrame()
+
+    series_ids = list(mapping.keys())
+    all_series = _fetch_bls_series_chunked(series_ids, start_year=2020,
+                                           end_year=datetime.now().year, api_key=api_key)
+    if not all_series:
+        return pd.DataFrame()
+
+    # Parse raw → records
+    records = []
+    for ser in all_series:
+        sid = ser.get("seriesID")
+        if sid not in mapping:
+            continue
+        region, industry = mapping[sid]
+        for entry in ser.get("data", []):
+            if entry.get("period") == "M13":
+                continue
+            try:
+                date = pd.to_datetime(entry["year"] + entry["periodName"], format="%Y%B", errors="coerce")
+                value = float(entry["value"].replace(",", "")) * 1000  # BLS CES is in thousands
+                records.append({"series_id": sid, "region": region, "industry": industry, "date": date, "value": value})
+            except Exception:
+                continue
+
+    if not records:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(records).dropna(subset=["date"])
+    if df.empty:
+        return pd.DataFrame()
+
+    results = []
+
+    # Compute both windows PER REGION in this mapping
+    for region in sorted(df["region"].unique()):
+        df_r = df[df["region"] == region].copy()
+        if df_r.empty:
+            continue
+
+        latest_date = df_r["date"].max()
+
+        # past 12 months baseline: nearest available month
+        baseline_12m_nominal = latest_date - pd.DateOffset(months=12)
+        avail = df_r["date"].unique()
+        baseline_12m = min(avail, key=lambda x: abs(x - baseline_12m_nominal)) if len(avail) else None
+
+        # since covid baseline
+        baseline_covid = pd.to_datetime("2020-02-01")
+
+        for which, baseline_date, metric_window in [
+            ("12m", baseline_12m, "past_12_months"),
+            ("covid", baseline_covid, "since_feb_2020"),
+        ]:
+            if baseline_date is None:
+                continue
+
+            base_df = df_r[df_r["date"] == baseline_date]
+            lat_df  = df_r[df_r["date"] == latest_date]
+            if base_df.empty or lat_df.empty:
+                continue
+
+            base_tot = base_df.groupby("industry")["value"].sum()
+            lat_tot  = lat_df.groupby("industry")["value"].sum()
+
+            # Derived category: WT&U = TTU - Retail
+            if "Trade, Transportation, and Utilities" in base_tot and "Retail Trade" in base_tot:
+                base_tot["Wholesale, Transportation, and Utilities"] = (
+                    base_tot["Trade, Transportation, and Utilities"] - base_tot["Retail Trade"]
+                )
+            if "Trade, Transportation, and Utilities" in lat_tot and "Retail Trade" in lat_tot:
+                lat_tot["Wholesale, Transportation, and Utilities"] = (
+                    lat_tot["Trade, Transportation, and Utilities"] - lat_tot["Retail Trade"]
+                )
+
+            inds = sorted(set(base_tot.index) & set(lat_tot.index))
+            for ind in inds:
+                if ind == "Trade, Transportation, and Utilities":
+                    # drop TTU to match chart behavior
+                    continue
+                base = float(base_tot[ind])
+                lat  = float(lat_tot[ind])
+                pct  = ((lat - base) / base * 100.0) if base > 0 else float("nan")
+
+                results.append({
+                    "region": region,
+                    "industry": ind,
+                    "metric_window": metric_window,
+                    "baseline_date": pd.Timestamp(baseline_date).strftime("%Y-%m-%d"),
+                    "latest_date": pd.Timestamp(latest_date).strftime("%Y-%m-%d"),
+                    "baseline_jobs": base,
+                    "latest_jobs": lat,
+                    "net_change": lat - base,
+                    "pct_change": pct,
+                })
+
+    if not results:
+        return pd.DataFrame()
+
+    out = pd.DataFrame(results).sort_values(["region", "industry", "metric_window"]).reset_index(drop=True)
+    return out
+    
 
 
 # === Build mode for GitHub Actions / local cron ===
@@ -3938,7 +4091,7 @@ if section == "Employment":
                         create_job_change_summary_table(df)
 
         elif subtab == "Industry":
-            show_combined_industry_job_recovery_chart(series_mapping, us_series_mapping, BLS_API_KEY)
+            show_combined_industry_job_recovery_chart(series_mapping_v2, us_series_mapping, BLS_API_KEY)
         elif subtab == "Office Sector":
             show_office_tech_recovery_chart(office_metros_mapping, BLS_API_KEY)
         elif subtab == "Jobs Ratio":
