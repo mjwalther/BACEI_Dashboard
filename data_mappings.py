@@ -436,3 +436,5 @@ color_map = {
     'Solano County': "#063b61",
     'Sonoma County': '#00aca2'
 }
+
+__all__ = ["state_code_map", "series_mapping", "series_mapping_v2"]
