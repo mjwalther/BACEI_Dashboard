@@ -117,6 +117,140 @@ def _write_artifacts(df, name: str, description: str | None = None):
     _manifest_add(df, name, description)
 # === end CSV + Manifest support ===
 
+# ---------- Office/Tech by Metro export ----------
+def build_metros_office_sector_employment_df_exact(api_key: str) -> pd.DataFrame:
+    """
+    Returns a tidy DataFrame that mirrors the chart's calculations for all UI timeframes.
+    Columns:
+      ['metro','timeframe','baseline_date','latest_date',
+       'baseline_value','latest_value','net_change','pct_change']
+    """
+    import requests
+    from datetime import datetime
+
+    try:
+        # Expect mapping: {series_id: (metro, sector)}
+        from data_mappings import office_metros_mapping
+    except Exception as e:
+        raise RuntimeError("Could not import office_metros_mapping from data_mappings.py") from e
+
+    # ---- Step 1: Fetch BLS data in batches of 25 (exactly as the chart does) ----
+    series_ids = list(office_metros_mapping.keys())
+    all_series = []
+    for i in range(0, len(series_ids), 25):
+        chunk = series_ids[i:i+25]
+        payload = {
+            "seriesid": chunk,
+            "startyear": "2020",
+            "endyear": str(datetime.now().year),
+            "registrationKey": api_key
+        }
+        resp = requests.post("https://api.bls.gov/publicAPI/v2/timeseries/data/", json=payload, timeout=30)
+        resp.raise_for_status()
+        js = resp.json()
+        if "Results" in js and "series" in js["Results"]:
+            all_series.extend(js["Results"]["series"])
+        else:
+            # Soft-fail; keep going (same spirit as st.warning in UI)
+            print(f"[build warning] No data returned for batch {(i//25)+1}")
+
+    # ---- Step 2: Parse to long rows (exact parsing rules) ----
+    recs = []
+    for series in all_series:
+        sid = series.get("seriesID")
+        if sid not in office_metros_mapping:
+            continue
+        metro, sector = office_metros_mapping[sid]
+        for entry in series.get("data", []):
+            if entry.get("period") == "M13":
+                continue  # annual
+            try:
+                # date via "year"+"periodName" (e.g., "2024"+"June")
+                date = pd.to_datetime(entry["year"] + entry["periodName"], format="%Y%B", errors="coerce")
+                # values (thousands) -> jobs; remove commas then *1000
+                value = float(entry["value"].replace(",", "")) * 1000.0
+                if pd.notnull(date):
+                    recs.append({"metro": metro, "sector": sector, "date": date, "value": value})
+            except Exception:
+                continue
+
+    df = pd.DataFrame(recs)
+    if df.empty:
+        # Keep behavior consistent: an empty export is allowed but flagged.
+        print("[build warning] No valid data records could be processed for office/tech export.")
+        return df
+
+    # Normalize dates to period start like the chart
+    df["date"] = pd.to_datetime(df["date"]).dt.to_period("M").dt.to_timestamp()
+
+    # ---- Step 3: Timeframes and baseline selection (exactly like the chart) ----
+    timeframes = ["6 Months", "12 Months", "18 Months", "24 Months", "36 Months", "Since COVID-19"]
+    months_map = {"6 Months": 6, "12 Months": 12, "18 Months": 18, "24 Months": 24, "36 Months": 36}
+
+    data_last = pd.to_datetime(df["date"].max()).to_period("M").to_timestamp()
+
+    # Choose baseline_target for each timeframe, then pick the NEAREST available date overall
+    available_dates = df["date"].unique()
+
+    def _nearest_date(target: pd.Timestamp) -> pd.Timestamp:
+        return min(available_dates, key=lambda x: abs(x - target))
+
+    tf_baselines: dict[str, tuple[pd.Timestamp, pd.Timestamp]] = {}
+    for tf in timeframes:
+        if tf == "Since COVID-19":
+            baseline_target = pd.to_datetime("2020-02-01")
+        else:
+            n_months = months_map[tf]
+            # chart uses (data_last - (n-1) months), aligned to month start
+            baseline_target = (data_last - pd.DateOffset(months=n_months - 1)).to_period("M").to_timestamp()
+        baseline_date = _nearest_date(baseline_target)
+        tf_baselines[tf] = (baseline_date, data_last)
+
+    # ---- Step 4: Aggregate Office/Tech totals per metro (same sectors list) ----
+    office_sectors = {"Information", "Financial and Business Services"}  # placeholder, replaced below
+    # EXACT list used in chart:
+    office_sectors = ["Information", "Financial Activities", "Professional and Business Services"]
+
+    # For speed, precompute per-date totals (sector filter applied)
+    df_office = df[df["sector"].isin(office_sectors)].copy()
+
+    results = []
+    for tf in timeframes:
+        baseline_date, latest_date = tf_baselines[tf]
+
+        baseline_totals = (
+            df_office[df_office["date"] == baseline_date]
+            .groupby("metro", as_index=True)["value"]
+            .sum()
+        )
+        latest_totals = (
+            df_office[df_office["date"] == latest_date]
+            .groupby("metro", as_index=True)["value"]
+            .sum()
+        )
+
+        # "Common metros" logic — only include metros with both dates present
+        common_metros = sorted(list(set(baseline_totals.index) & set(latest_totals.index)))
+        for m in common_metros:
+            base = float(baseline_totals[m])
+            latest = float(latest_totals[m])
+            net_change = latest - base
+            pct_change = (net_change / base * 100.0) if base > 0 else float("nan")
+            results.append({
+                "metro": m,
+                "timeframe": tf,
+                "baseline_date": baseline_date.date().isoformat(),
+                "latest_date": latest_date.date().isoformat(),
+                "baseline_value": base,
+                "latest_value": latest,
+                "net_change": net_change,
+                "pct_change": pct_change,
+            })
+
+    out = pd.DataFrame(results).sort_values(["timeframe", "metro"]).reset_index(drop=True)
+    return out
+# ---------- end Office/Tech by Metro export ----------
+
 
 def build_all_tables():
     """
@@ -127,11 +261,8 @@ def build_all_tables():
     try:
         bay_df = fetch_bay_area_payroll_data()
         if bay_df is not None:
-            # _write_parquet(bay_df, "bay_area_payroll")
             _write_artifacts(bay_df, "bay_area_payroll", "Bay Area Non-Farm Payroll Employment by Month")
             tables["bay_area_payroll"] = bay_df
-    # except Exception as e:
-    #     st.warning(f"Build: failed bay_area_payroll: {e}")
 
     except Exception as e:
         _warn(f"Build: failed bay_area_payroll: {e}")
@@ -197,32 +328,6 @@ def build_all_tables():
         _warn(f"Build: failed LAUS_Bay_Area: {e}")
 
     try:
-        # def _debug_mapping_shapes(name, mapping):
-        #     from collections import Counter
-        #     shapes = Counter()
-        #     bad = []
-        #     for k, v in mapping.items():
-        #         if isinstance(v, (list, tuple)):
-        #             shapes[len(v)] += 1
-        #             if len(v) < 2:
-        #                 bad.append((k, v))
-        #         elif isinstance(v, dict):
-        #             shapes["dict"] += 1
-        #             if not all(key in v for key in ("region", "industry")):
-        #                 bad.append((k, v))
-        #         else:
-        #             shapes[type(v).__name__] += 1
-        #             bad.append((k, v))
-        #     print(f"[mapping debug] {name} shapes: {shapes}")
-        #     if bad:
-        #         print(f"[mapping debug] {name} bad entries (first 5): {bad[:5]}")
-
-        # _debug_mapping_shapes("series_mapping", series_mapping)
-        # # _debug_mapping_shapes("us_series_mapping", us_series_mapping)
-
-        # df_bay = _compute_industry_export_for_region(series_mapping, BLS_API_KEY)
-        # df_us  = _compute_industry_export_for_region(us_series_mapping, BLS_API_KEY)
-
         def _only_region_industry(mapping):
             # keep only {series_id: (region, industry, ...maybe extras)}
             clean = {}
@@ -247,6 +352,20 @@ def build_all_tables():
             _warn("Build: industry_job_recovery produced no rows.")
     except Exception as e:
         _warn(f"Build: failed industry_job_recovery: {e}")
+
+    try:
+        metros_office_df = build_metros_office_sector_employment_df_exact(BLS_API_KEY)
+        if metros_office_df is not None and not metros_office_df.empty:
+            _write_artifacts(
+                metros_office_df,
+                "metros_office_sector_employment",
+                "Office/Tech employment by metro with chart-matching baselines (6–36 months & Since COVID-19)."
+            )
+            tables["metros_office_sector_employment"] = metros_office_df
+        else:
+            _warn("Build: metros_office_sector_employment produced no rows.")
+    except Exception as e:
+        _warn(f"Build: failed metros_office_sector_employment: {e}")
 
 
     _write_manifest()
@@ -3200,7 +3319,7 @@ if section == "Employment":
             with c2:
                 metric_choice = st.radio(
                     "Metric:",
-                    ["Percent Change", "Net Change"],   # default to Percent like your current chart
+                    ["Percent Change", "Net Change"],
                     index=0,
                     horizontal=True,
                     key="office_metric_select"
