@@ -197,8 +197,42 @@ def build_all_tables():
         _warn(f"Build: failed LAUS_Bay_Area: {e}")
 
     try:
-        df_bay = _compute_industry_export_for_region(series_mapping, BLS_API_KEY)
-        df_us  = _compute_industry_export_for_region(us_series_mapping, BLS_API_KEY)
+        # def _debug_mapping_shapes(name, mapping):
+        #     from collections import Counter
+        #     shapes = Counter()
+        #     bad = []
+        #     for k, v in mapping.items():
+        #         if isinstance(v, (list, tuple)):
+        #             shapes[len(v)] += 1
+        #             if len(v) < 2:
+        #                 bad.append((k, v))
+        #         elif isinstance(v, dict):
+        #             shapes["dict"] += 1
+        #             if not all(key in v for key in ("region", "industry")):
+        #                 bad.append((k, v))
+        #         else:
+        #             shapes[type(v).__name__] += 1
+        #             bad.append((k, v))
+        #     print(f"[mapping debug] {name} shapes: {shapes}")
+        #     if bad:
+        #         print(f"[mapping debug] {name} bad entries (first 5): {bad[:5]}")
+
+        # _debug_mapping_shapes("series_mapping", series_mapping)
+        # # _debug_mapping_shapes("us_series_mapping", us_series_mapping)
+
+        # df_bay = _compute_industry_export_for_region(series_mapping, BLS_API_KEY)
+        # df_us  = _compute_industry_export_for_region(us_series_mapping, BLS_API_KEY)
+
+        def _only_region_industry(mapping):
+            # keep only {series_id: (region, industry, ...maybe extras)}
+            clean = {}
+            for k, v in mapping.items():
+                if isinstance(v, (list, tuple)) and len(v) >= 2:
+                    clean[k] = (v[0], v[1])  # normalize to first two
+            return clean
+
+        df_bay = _compute_industry_export_for_region(_only_region_industry(series_mapping), BLS_API_KEY)
+        df_us  = _compute_industry_export_for_region(_only_region_industry(us_series_mapping), BLS_API_KEY)
 
         combined = pd.concat([df_bay, df_us], ignore_index=True) if not df_bay.empty or not df_us.empty else pd.DataFrame()
 
@@ -1113,29 +1147,6 @@ def show_data_downloads():
         except Exception as e:
             st.warning(f"Could not load manifest: {e}")
             return
-
-    # df_states = None
-    # try:
-    #     df_states = load_prebuilt_or_fetch(
-    #         "states_payroll",
-    #         lambda: fetch_states_job_data(list(series_mapping.get("states", {}).values()))
-    #     )
-    # except Exception as e:
-    #     st.info(f"State jobs dataset unavailable: {e}")
-
-    # if df_states is not None and not df_states.empty:
-    #     with st.expander("State Job Recovery (df_states)"):
-    #         st.caption(f"Rows: {len(df_states)} · Columns: {len(df_states.columns)}")
-    #         st.dataframe(df_states.head(200), use_container_width=True)
-
-    #         # Offer CSV download
-    #         _csv = df_states.to_csv(index=False).encode("utf-8")
-    #         st.download_button(
-    #             label="Download df_states as CSV",
-    #             data=_csv,
-    #             file_name="states_jobs.csv",
-    #             mime="text/csv"
-    #         )
 
     # Simple search/filter
     col1, col2 = st.columns([2, 1])
@@ -3141,7 +3152,7 @@ if section == "Employment":
         summary_df = pd.DataFrame({
             'Industry': order,
             f'{baseline_label} Jobs': [f"{baseline_totals[ind]:,.0f}" for ind in order],
-            f'{latest_date.strftime("%b %Y")} Jobs': [f"{latest_totals[ind]:,.0f}" for ind in order],
+            f'{latest_date.strftime("%B %Y")} Jobs': [f"{latest_totals[ind]:,.0f}" for ind in order],
             'Net Change': [f"{(latest_totals[ind] - baseline_totals[ind]):+,.0f}" for ind in order],
             'Percent Change': [f"{pct_change.get(ind, np.nan):+.1f}%" for ind in order],
         })
