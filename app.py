@@ -1397,6 +1397,41 @@ def show_data_downloads():
 # --- Title ----
 st.set_page_config(page_title="Bay Area Dashboard", layout="wide")
 
+
+st.markdown(
+    """
+    <style>
+      :root { --custom-header-height: 28px; }
+
+      header[data-testid="stHeader"],
+      header[data-testid="stHeader"] > div,
+      div[data-testid="stToolbar"] {
+        height: var(--custom-header-height) !important;
+        min-height: var(--custom-header-height) !important;
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+      }
+
+      header[data-testid="stHeader"] button,
+      header[data-testid="stHeader"] a {
+        transform: scale(0.75);
+        margin: 0 2px !important;
+      }
+
+      /* Prevent overlap: push page content down by the new header height */
+      [data-testid="stAppViewContainer"] > .main {
+        padding-top: calc(var(--custom-header-height) + 6px) !important;
+      }
+
+      /* Fallback for older Streamlit DOMs */
+      section.main > div {
+        padding-top: calc(var(--custom-header-height) + 6px) !important;
+      }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 @st.cache_data(ttl=3600)
 def _load_version():
     import requests, json
@@ -1416,12 +1451,12 @@ try:
         dt_utc = datetime.fromisoformat(ts_clean)
         # Convert UTC → Pacific Time
         dt_pt = dt_utc.astimezone(ZoneInfo("America/Los_Angeles"))
-        formatted = dt_pt.strftime("%Y-%m-%d at %H:%M %p PT")
-        st.caption(f"Last updated: {formatted}")
+        formatted = dt_pt.strftime("%m-%d-%Y at %-I:%M %p PT")
     else:
-        st.caption("Last updated: unknown")
+        formatted = "Unknown"
 except Exception:
-    st.caption("Last updated: unknown")
+        formatted = "Unknown"
+
 
 st.markdown(
     """
@@ -1477,6 +1512,11 @@ if is_downloads:
     show_data_downloads()
     st.stop()
 
+# --- Sidebar footer placement ---
+with st.sidebar:
+    st.markdown("<div style='flex:1'></div>", unsafe_allow_html=True)  # spacer
+    st.markdown("---")
+    st.caption(f"Last updated: {formatted}")
 
 # --- Main Content ---
 if section == "Employment":
