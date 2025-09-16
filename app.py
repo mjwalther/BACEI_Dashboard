@@ -1960,7 +1960,7 @@ if section == "Employment":
         st.plotly_chart(
             fig,
             use_container_width=True,
-            config={"toImageButtonOptions": {"format": "png", "filename": "job_recovery", "scale": 5}}
+            config={"toImageButtonOptions": {"format": "svg", "filename": "job_recovery", "scale": 10}}
         )
 
         st.markdown("""
@@ -2520,9 +2520,6 @@ if section == "Employment":
         Returns:
             None. The function directly renders the chart in Streamlit using `st.plotly_chart()`.
         """
-        # # Custom start date
-        # start_date = pd.to_datetime("2020-02-01")
-
         # --- Time-frame selector ---
         with st.container():
             tf_choice = st.radio(
@@ -2552,12 +2549,17 @@ if section == "Employment":
             n_months = months_map[tf_choice]
             start_date = (data_last - pd.DateOffset(months=n_months-1)).to_period("M").to_timestamp()
 
+
+        # # --- TEMPORARY OVERRIDE FOR CUSTOM WINDOW: EDIT AS DESIRED ---
+        # FORCE_WINDOW = True
+        # if FORCE_WINDOW:
+        #     start_date = pd.to_datetime("2022-01-01")
+        #     data_last = pd.to_datetime("2025-06-01").to_period("M").to_timestamp()
+        # # --------------------------------------------------------------
+
         # --- Filter to selected window ---
         df = df[(df["date"] >= start_date) & (df["date"] <= data_last)].sort_values("date")
 
-        # --- Custom end date ---
-        # end_date = pd.to_datetime("2025-06-01")  # Set end date to June 1, 2025
-        # df = df[(df["date"] >= start_date) & (df["date"] <= end_date)].sort_values("date")
 
         # Calculate dynamic y-axis range excluding April 2020
         df_for_range = df[df["date"] != pd.to_datetime("2020-04-01")]
@@ -2586,7 +2588,6 @@ if section == "Employment":
         df = df.copy()
         df["pretty_label"] = df["monthly_change"].apply(format_label)
 
-
         fig = go.Figure()
         fig.add_trace(go.Bar(
             x=df["date"],
@@ -2614,7 +2615,7 @@ if section == "Employment":
         elif n_bars <= 36:     
             label_size = 12
         else:                 
-            label_size = 8
+            label_size = 6
 
         fig.update_traces(
             textposition="outside",
@@ -2659,7 +2660,7 @@ if section == "Employment":
             yaxis=dict(
                 title='Monthly Change in Jobs',
                 title_font=dict(family="Avenir Medium", size=18, color="black"),
-                tickfont=dict(family="Avenir", size=14, color="black"),
+                tickfont=dict(family="Avenir", size=16, color="black"),
                 showgrid=True,
                 range=[y_axis_min, y_axis_max]
             ),
@@ -2670,9 +2671,9 @@ if section == "Employment":
                 use_container_width=True,
                 config={
                     "toImageButtonOptions": {
-                        "format": "png",   # or 'svg'
+                        "format": "svg",   # or 'svg'
                         "filename": "monthly_job_change",
-                        "scale": 5
+                        "scale": 10
                     }
                 }
         )
@@ -2950,14 +2951,15 @@ if section == "Employment":
         
         st.dataframe(summary_stats, use_container_width=True, hide_index=True)
 
-
     def show_combined_industry_job_recovery_chart(bay_area_series_mapping, us_series_mapping, BLS_API_KEY):
         """
-        Horizontal bar chart of job recovery by industry with region + period + metric selectors.
+        Horizontal bar chart of job recovery by industry with region + time frame + metric selectors.
+        Matches the time-frame behavior of show_office_tech_recovery_chart.
         """
 
         st.subheader("Job Recovery by Industry")
 
+        # --- Controls ---
         region_choice = st.selectbox(
             "Select Region:",
             ["Bay Area", "United States"],
@@ -2966,13 +2968,13 @@ if section == "Employment":
         )
 
         col1, col2 = st.columns([1, 1])
-
         with col1:
-            recovery_period = st.radio(
-                "Select Recovery Period:",
-                ["Last 12 Months", "Since COVID-19"],
+            tf_choice = st.radio(
+                label="Select Time Frame:",
+                options=["6 Months", "12 Months", "18 Months", "24 Months", "36 Months", "Since COVID-19"],
+                index=5,
                 horizontal=True,
-                key="industry_period_select"
+                key="industry_timeframe_select"
             )
         with col2:
             metric_choice = st.radio(
@@ -3022,10 +3024,12 @@ if section == "Employment":
                 continue
             region, industry = selected_mapping[sid]
             for entry in series["data"]:
-                if entry["period"] == "M13":
+                if entry.get("period") == "M13":
                     continue
                 try:
                     date = pd.to_datetime(entry["year"] + entry["periodName"], format="%Y%B", errors="coerce")
+                    if pd.isna(date):
+                        continue
                     value = float(entry["value"].replace(",", "")) * 1000
                     records.append({
                         "series_id": sid,
@@ -3034,34 +3038,33 @@ if section == "Employment":
                         "date": date,
                         "value": value
                     })
-                except (ValueError, TypeError):
+                except Exception:
                     continue
-
-        if not records:
-            st.error("No valid data records could be processed")
-            return
 
         df = pd.DataFrame(records)
         if df.empty:
             st.error("No valid data records could be processed.")
             return
 
-        # --- Baseline & latest dates ---
-        if recovery_period == "Since COVID-19":
-            baseline_date = pd.to_datetime("2020-02-01")
-            baseline_label = "February 2020"
-            title_period = "Post-Covid"
+        # --- Time-frame baseline selection (mirrors office/tech chart) ---
+        data_last = pd.to_datetime(df["date"].max()).to_period("M").to_timestamp()
+        months_map = {"6 Months": 6, "12 Months": 12, "18 Months": 18, "24 Months": 24, "36 Months": 36}
+        if tf_choice == "Since COVID-19":
+            baseline_target = pd.to_datetime("2020-02-01")
         else:
-            latest_date = df["date"].max()
-            baseline_date = latest_date - pd.DateOffset(months=12)
-            available_dates = df["date"].unique()
-            closest_baseline = min(available_dates, key=lambda x: abs(x - baseline_date))
-            baseline_date = closest_baseline
-            baseline_label = baseline_date.strftime("%B %Y")
-            title_period = "Last 12 Months"
+            n_months = months_map[tf_choice]
+            # Inclusive window: if last is Aug, 12 months spans Sep last year .. Aug this year
+            baseline_target = (data_last - pd.DateOffset(months=n_months - 1)).to_period("M").to_timestamp()
 
-        latest_date = df["date"].max()
+        available_dates = df["date"].unique()
+        baseline_date = min(available_dates, key=lambda x: abs(x - baseline_target))
+        latest_date   = data_last
 
+        baseline_label = pd.to_datetime(baseline_date).strftime("%B %Y")
+        title_period   = tf_choice if tf_choice != "Since COVID-19" else "Post-Covid"
+        subtitle_text  = f"{baseline_label} to {latest_date.strftime('%B %Y')}"
+
+        # --- Slice baseline/latest ---
         baseline_df = df[df["date"] == baseline_date]
         latest_df   = df[df["date"] == latest_date]
 
@@ -3086,7 +3089,7 @@ if section == "Employment":
                 latest_totals["Trade, Transportation, and Utilities"] - latest_totals["Retail Trade"]
             )
 
-        # --- Build both metrics; keep only industries with both points ---
+        # Keep only industries present in both periods
         industries_with_both = set(baseline_totals.index) & set(latest_totals.index)
 
         # Percent change
@@ -3101,7 +3104,7 @@ if section == "Employment":
         for industry in industries_with_both:
             net_change[industry] = latest_totals[industry] - baseline_totals[industry]
 
-        # Drop TTU
+        # Drop aggregate TTU
         pct_change = pct_change.sort_values().drop("Trade, Transportation, and Utilities", errors="ignore")
         net_change = net_change.sort_values().drop("Trade, Transportation, and Utilities", errors="ignore")
 
@@ -3111,6 +3114,18 @@ if section == "Employment":
         if net_change.empty and metric_choice == "Net Change":
             st.error("No industries have sufficient data for net change comparison")
             return
+
+        # --- Axis helpers (same as your existing logic) ---
+        def nice_step(data_range, target_ticks=8):
+            if data_range <= 0:
+                return 1
+            ideal = data_range / max(1, target_ticks)
+            power = 10 ** np.floor(np.log10(ideal))
+            for m in (1, 2, 2.5, 5, 10):
+                step = m * power
+                if step >= ideal:
+                    return step
+            return 10 * power
 
         # --- Choose metric for plotting ---
         if metric_choice == "Net Change":
@@ -3126,32 +3141,17 @@ if section == "Employment":
             label_formatter = lambda v: f"{v:+.1f}%"
             tick_value_formatter = lambda x: f"{x:.0f}%"
             is_percent_axis = True
-            hover_value_fmt = ":.1f"  # percent with one decimal
-
-       # --- Dynamic ticks with extra room on both sides for outside labels ---
-        def nice_step(data_range, target_ticks=8):
-            if data_range <= 0:
-                return 1
-            ideal = data_range / max(1, target_ticks)
-            power = 10 ** np.floor(np.log10(ideal))
-            for m in (1, 2, 2.5, 5, 10):
-                step = m * power
-                if step >= ideal:
-                    return step
-            return 10 * power
+            hover_value_fmt = ":.1f"
 
         vmin = float(selected.min())
         vmax = float(selected.max())
         rng  = vmax - vmin
         if rng <= 0:
             rng = 1.0 if is_percent_axis else 1000.0
-
         max_abs = max(abs(vmin), abs(vmax))
 
         # Base padding
         pad_pct = 0.18 if not is_percent_axis else 0.12
-
-        # Optional: tighter padding specifically for Bay Area net-change
         if title_region == "Bay Area" and not is_percent_axis:
             pad_pct = 0.12
 
@@ -3185,7 +3185,7 @@ if section == "Employment":
 
         # --- Chart ---
         fig = go.Figure()
-        order = selected.index  # preserve sorted order for everything below
+        order = selected.index  # preserve sorted order
 
         fig.add_trace(go.Bar(
             y=order,
@@ -3193,7 +3193,7 @@ if section == "Employment":
             orientation='h',
             marker_color=colors,
             text=[label_formatter(v) for v in selected.loc[order].values],
-            textfont=dict(size=20, family="Avenir Light", color="black"),
+            textfont=dict(size=16, family="Avenir Light", color="black"),
             textposition="outside",
             hovertemplate=(
                 f"%{{y}}<br>{metric_choice}: %{{x{hover_value_fmt}}}"
@@ -3212,10 +3212,6 @@ if section == "Employment":
                 layer="below"
             )
 
-        # Subtitle
-        subtitle_text = f"{title_period}: {baseline_date.strftime('%B %Y')} to {latest_date.strftime('%B %Y')}"
-
-        # Axis formatting
         fig.update_layout(
             xaxis_title=xaxis_title,
             title=dict(
@@ -3243,22 +3239,20 @@ if section == "Employment":
             height=600
         )
 
-        fig.update_traces(
-            textposition="outside",
-            cliponaxis=False
-        )
+        fig.update_traces(textposition="outside", cliponaxis=False)
 
         st.plotly_chart(
             fig,
             use_container_width=True,
             config={
                 "toImageButtonOptions": {
-                    "format": "png",
+                    "format": "svg",
                     "filename": "industry_recovery",
-                    "scale": 5
+                    "scale": 10
                 }
             }
         )
+
         st.markdown(f"""
         <div style='font-size: 12px; color: #666; font-family: "Avenir", sans-serif;'>
         <strong>Source:</strong> Bureau of Labor Statistics (BLS). <strong>Note:</strong> Total Non-Farm Employment data is seasonally adjusted, while other industries are not seasonally adjusted.<br>
@@ -3273,7 +3267,7 @@ if section == "Employment":
             f'{baseline_label} Jobs': [f"{baseline_totals[ind]:,.0f}" for ind in order],
             f'{latest_date.strftime("%B %Y")} Jobs': [f"{latest_totals[ind]:,.0f}" for ind in order],
             'Net Change': [f"{(latest_totals[ind] - baseline_totals[ind]):+,.0f}" for ind in order],
-            'Percent Change': [f"{pct_change.get(ind, np.nan):+.1f}%" for ind in order],
+            'Percent Change': [f"{(pct_change.get(ind, np.nan)):+.1f}%" for ind in order],
         })
 
         def color_percent(val):
