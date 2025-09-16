@@ -1140,12 +1140,16 @@ def _fetch_bls_series_chunked(series_ids: list[str], start_year: int, end_year: 
             resp.raise_for_status()
 
             data = resp.json()
+            # after 'data = resp.json()'
             if "Results" in data and "series" in data["Results"]:
                 ser = data["Results"]["series"]
                 _debug(f"Returned series={len(ser)}; first id={ser[0].get('seriesID') if ser else None}")
                 all_series.extend(ser)
             else:
-                _debug(f"No 'Results.series' in payload. Keys: {list(data.keys())}")
+                _debug(
+                    "No 'Results.series' in payload. "
+                    f"status={data.get('status')}, message={data.get('message')}, keys={list(data.keys())}"
+                )
         except Exception as e:
             _debug(f"BLS fetch failed for chunk {i//25+1}: {e}")
 
