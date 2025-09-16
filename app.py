@@ -1086,27 +1086,74 @@ def fetch_and_process_job_data(series_id, region_name):
         st.error(f"Failed to fetch data for {region_name}: {e}")
         return None
     
+# def _fetch_bls_series_chunked(series_ids: list[str], start_year: int, end_year: int, api_key: str):
+#     """Fetch BLS timeseries in chunks of 25 (public API limit). Returns list of series dicts."""
+#     import requests, math
+#     all_series = []
+    
+#     for i in range(0, len(series_ids), 25):
+#         chunk = series_ids[i:i+25]
+#         payload = {
+#             "seriesid": chunk,
+#             "startyear": str(start_year),
+#             "endyear": str(end_year),
+#             "registrationKey": api_key,
+#         }
+#         try:
+#             resp = requests.post("https://api.bls.gov/publicAPI/v2/timeseries/data/",
+#                                  json=payload, timeout=30)
+#             data = resp.json()
+#             if "Results" in data and "series" in data["Results"]:
+#                 all_series.extend(data["Results"]["series"])
+#         except Exception as e:
+#             _warn(f"BLS fetch failed for chunk {i//25+1}: {e}")
+#     return all_series
+
+def _debug(msg):
+    import sys
+    print(f"[build] {msg}", file=sys.stderr, flush=True)
+
 def _fetch_bls_series_chunked(series_ids: list[str], start_year: int, end_year: int, api_key: str):
-    """Fetch BLS timeseries in chunks of 25 (public API limit). Returns list of series dicts."""
-    import requests, math
+    import requests
+
     all_series = []
+    if not series_ids:
+        _debug("BLS fetch called with 0 series_ids.")
+        return all_series
+
     for i in range(0, len(series_ids), 25):
         chunk = series_ids[i:i+25]
-        payload = {
-            "seriesid": chunk,
-            "startyear": str(start_year),
-            "endyear": str(end_year),
-            "registrationKey": api_key,
-        }
+        _debug(f"BLS chunk {i//25+1}: size={len(chunk)}, sample={chunk[:3]}, key_present={bool(api_key)}")
+
         try:
-            resp = requests.post("https://api.bls.gov/publicAPI/v2/timeseries/data/",
-                                 json=payload, timeout=30)
+            resp = requests.post(
+                "https://api.bls.gov/publicAPI/v2/timeseries/data/",
+                json={
+                    "seriesid": chunk,
+                    "startyear": str(start_year),
+                    "endyear": str(end_year),
+                    "registrationKey": api_key,
+                },
+                timeout=30,
+            )
+            _debug(f"HTTP {resp.status_code}; bytes={len(resp.content)}")
+            resp.raise_for_status()
+
             data = resp.json()
             if "Results" in data and "series" in data["Results"]:
-                all_series.extend(data["Results"]["series"])
+                ser = data["Results"]["series"]
+                _debug(f"Returned series={len(ser)}; first id={ser[0].get('seriesID') if ser else None}")
+                all_series.extend(ser)
+            else:
+                _debug(f"No 'Results.series' in payload. Keys: {list(data.keys())}")
         except Exception as e:
-            _warn(f"BLS fetch failed for chunk {i//25+1}: {e}")
+            _debug(f"BLS fetch failed for chunk {i//25+1}: {e}")
+
+    if not all_series:
+        _debug("BLS fetch produced 0 series across all chunks.")
+
     return all_series
+
 
 def _compute_industry_export_for_region(mapping: dict[str, tuple[str, str]], api_key: str):
     """
