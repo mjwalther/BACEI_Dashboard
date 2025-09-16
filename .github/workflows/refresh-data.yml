@@ -44,6 +44,25 @@ jobs:
           pip install -r requirements.txt
           pip install pyarrow
 
+      - name: BLS API smoke test
+        run: |
+          python - <<'PY'
+          import os, requests, sys
+          url = "https://api.bls.gov/publicAPI/v2/timeseries/data/"
+          payload = {
+            "seriesid": ["CEU0000000001"],  # US Total Nonfarm
+            "startyear": "2020", "endyear": "2025",
+            "registrationKey": os.getenv("BLS_API_KEY","")
+          }
+          r = requests.post(url, json=payload, timeout=30)
+          ok = (r.status_code == 200)
+          j = r.json() if ok else {}
+          ok = ok and "Results" in j and j["Results"].get("series")
+          if not ok:
+            print("BLS smoke test FAILED", r.status_code, j); sys.exit(1)
+          print("BLS smoke test passed:", len(j["Results"]["series"][0].get("data",[])), "points")
+          PY
+
       # Build writes docs/data_build/*.csv, manifest.csv, version.json and exits
       - name: Build data artifacts
         env:
