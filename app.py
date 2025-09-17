@@ -1032,7 +1032,6 @@ def _guess_bay_area_label(regions: list[str]) -> str | None:
     Try to find the Bay Area 9-county column automatically.
     """
     lower = [r.lower() for r in regions]
-    # common patterns to match
     candidates = [
         "bay area (9-county)",
         "bay area 9-county",
@@ -1044,6 +1043,7 @@ def _guess_bay_area_label(regions: list[str]) -> str | None:
         if cand in lower:
             idx = lower.index(cand)
             return regions[idx]
+        
     # Heuristic: any region containing both "bay" and "area"
     for i, r in enumerate(lower):
         if "bay" in r and "area" in r:
@@ -1094,24 +1094,58 @@ def show_population_trend_chart():
         color="region",
         markers=True,
         line_shape="linear",
+        labels={"region": "Region"},
+        color_discrete_map={"Bay Area (9-county)": "#00aca2"}
     )
 
     fig.update_layout(
+        title=dict(
+            text="<span style='font-size:26px; font-family:Avenir Black'>Population by County<br><span style='font-size:20px; color:#666; font-family:Avenir Medium'></span>",
+            x=0.5,
+            xanchor='center',
+        ),
         height=450,
-        margin=dict(l=10, r=10, t=10, b=10),
         legend=dict(orientation="h", y=-0.2),
-        font=dict(family="Avenir, Avenir Next, Helvetica, Arial, sans-serif", size=13),
+        font=dict(family="Avenir", size=15),
         xaxis_title="Year",
         yaxis_title="Population",
         hovermode="x unified",
     )
-    fig.update_xaxes(dtick=1, tickformat="d")
-    fig.update_yaxes(separatethousands=True)
+
+    fig.update_xaxes(dtick=1,
+                     tickformat="d",
+                     title_font=dict(family="Avenir Medium", size=22, color="black"),
+                     tickfont=dict(family="Avenir", size=16, color="black")
+                    )
+    
+    fig.update_yaxes(separatethousands=True,
+                     title_font=dict(family="Avenir Medium", size=18, color="black"),
+                     tickfont=dict(family="Avenir", size=16, color="black")
+                    )
 
     # Nice hover
     fig.update_traces(hovertemplate="<b>%{fullData.name}</b><br>Year: %{x}<br>Population: %{y:,}<extra></extra>")
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(
+            fig, 
+            use_container_width=True,
+            config={
+                "toImageButtonOptions": {
+                    "format": "svg",
+                    "filename": "county_population",
+                    "scale": 10          # higher scale = higher DPI
+                }
+            }
+    )
+
+    st.markdown("""
+    <div style='font-size: 12px; color: #666; font-family: "Avenir", sans-serif;'>
+    <strong style='font-family: "Avenir Medium", sans-serif;'>Source: </strong>U.S. Census Bureau, Population Division.<br>
+    <strong style='font-family: "Avenir Medium", sans-serif;'>Analysis:</strong> Bay Area Council Economic Institute.<br>
+    </div>
+    <br>
+    """, unsafe_allow_html=True)
+
 
     # Download the filtered data
     csv = plot_df.sort_values(["region", "year"]).to_csv(index=False)
@@ -1122,8 +1156,6 @@ def show_population_trend_chart():
         mime="text/csv",
         help="Download the data for the region(s) currently selected."
     )
-
-    st.caption("Source: County population estimates, 2010–2024.")
 
 
 # --- Data Processing ---
@@ -2807,12 +2839,12 @@ def create_monthly_job_change_chart(df, region_name):
         start_date = (data_last - pd.DateOffset(months=n_months-1)).to_period("M").to_timestamp()
 
 
-    # # --- TEMPORARY OVERRIDE FOR CUSTOM WINDOW: EDIT AS DESIRED ---
-    # FORCE_WINDOW = True
-    # if FORCE_WINDOW:
-    #     start_date = pd.to_datetime("2022-01-01")
-    #     data_last = pd.to_datetime("2025-06-01").to_period("M").to_timestamp()
-    # # --------------------------------------------------------------
+    # --- TEMPORARY OVERRIDE FOR CUSTOM WINDOW: EDIT AS DESIRED ---
+    FORCE_WINDOW = True
+    if FORCE_WINDOW:
+        start_date = pd.to_datetime("2022-01-01")
+        data_last = pd.to_datetime("2025-07-01").to_period("M").to_timestamp()
+    # --------------------------------------------------------------
 
     # --- Filter to selected window ---
     df = df[(df["date"] >= start_date) & (df["date"] <= data_last)].sort_values("date")
@@ -4476,7 +4508,6 @@ if section == "Employment":
         create_jobs_ratio_chart()
 
 elif section == "Population":
-    st.header("Population")
     if pop_subtab == "Population":
         show_population_trend_chart()
 
