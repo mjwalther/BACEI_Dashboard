@@ -13,6 +13,7 @@ import json, time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from pathlib import Path
+import re
 from data_mappings import state_code_map, series_mapping, series_mapping_v2, bay_area_counties, regions, office_metros_mapping, rename_mapping, color_map, sonoma_mapping, us_series_mapping
 series_mapping.setdefault("states", state_code_map)
 
@@ -135,7 +136,7 @@ def build_metros_office_sector_employment_df_exact(api_key: str) -> pd.DataFrame
     except Exception as e:
         raise RuntimeError("Could not import office_metros_mapping from data_mappings.py") from e
 
-    # ---- Step 1: Fetch BLS data in batches of 25 (exactly as the chart does) ----
+    # ---- Step 1: Fetch BLS data in batches of 25  ----
     series_ids = list(office_metros_mapping.keys())
     all_series = []
     for i in range(0, len(series_ids), 25):
@@ -1073,7 +1074,7 @@ def show_population_trend_chart():
 
     # UI controls
     selected = st.multiselect(
-        "Select region(s):",
+        "Select Region:",
         options=regions,
         default=[default_region] if default_region else [],
         key="population_region_multiselect",
@@ -1676,6 +1677,7 @@ section = st.sidebar.selectbox(
 # --- Sidebar Subtabs ---i
 emp_subtab = None
 pop_subtab = None
+housing_subtab = None
 
 if section == "Employment":
     emp_subtab = st.sidebar.radio(
@@ -1686,8 +1688,14 @@ if section == "Employment":
 elif section == "Population":
     pop_subtab = st.sidebar.radio(
         "Population Views:",
-        ["Population"],
+        ["Bay Area Counties", "Metropolitan Areas"],
         key="population_subtab"
+    )
+elif section == "Housing":
+    housing_subtab = st.sidebar.radio(
+        "Housing Views:",
+        ["Median Rents", "Housing Permits"],
+        key="housing_subtab"
     )
 
 
@@ -4405,6 +4413,604 @@ def create_jobs_ratio_chart():
     st.dataframe(styled_summary, use_container_width=True, hide_index=True)
 
 
+def show_metro_population_change_chart(
+    csv_path: str = "docs/data_build/Metro_Population.csv",
+    rename_mapping: dict[str, str] | None = None,
+):
+    """
+    Reads a wide CSV with columns:
+      Year, United States, Atlanta, Austin, ..., Washington D.C.
+    and renders a horizontal bar chart of PERCENT change in population for a chosen timeframe:
+      - Last Year, Last 5 Years, Last 10 Years, Since 2010
+
+    Always uses percent change (no net-change toggle), styled like your Office/Tech chart.
+    """
+
+    st.subheader("Population Change by Metro/Region")
+
+    # --- Timeframe selector ---
+    tf_choice = st.radio(
+        "Select Time Frame:",
+        ["Last Year", "Last 5 Years", "Last 10 Years", "Since 2010"],
+        index=2,  # default "Last 10 Years"
+        horizontal=True,
+        key="metro_pop_wide_timeframe"
+    )
+
+    # --- Load CSV (with fallback to /mnt/data) ---
+    df = pd.DataFrame()
+    for p in [Path(csv_path), Path("/mnt/data/Metro_Population.csv")]:
+        if p.exists():
+            df = pd.read_csv(p)
+            source_used = str(p)
+            break
+
+    if df.empty:
+        st.error("Could not find Metro_Population.csv at docs/data_build/ or /mnt/data/.")
+        return
+
+    # Normalize columns
+    if "Year" not in df.columns:
+        st.error("CSV must have a 'Year' column as the first column.")
+        return
+
+    # Ensure year is integer; other columns numeric
+    df["Year"] = pd.to_numeric(df["Year"], errors="coerce").astype("Int64")
+    region_cols = [c for c in df.columns if c != "Year"]
+
+    # Coerce populations to numeric
+    for c in region_cols:
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+
+    # Determine latest year present
+    latest_year = int(df["Year"].max())
+
+    # Baseline selection
+    if tf_choice == "Last Year":
+        baseline_year = latest_year - 1
+    elif tf_choice == "Last 5 Years":
+        baseline_year = latest_year - 5
+    elif tf_choice == "Last 10 Years":
+        baseline_year = latest_year - 10
+    else:
+        baseline_year = 2010
+
+    # Ensure baseline exists; if not, pick closest available year to target
+    years_available = df["Year"].dropna().astype(int).unique()
+    if baseline_year not in years_available:
+        # choose the YEAR in data with smallest |year - baseline_target|
+        baseline_year = int(min(years_available, key=lambda y: abs(y - baseline_year)))
+
+    # Extract baseline & latest rows
+    base_row = df.loc[df["Year"] == baseline_year]
+    last_row = df.loc[df["Year"] == latest_year]
+
+    if base_row.empty or last_row.empty:
+        st.warning("Baseline or latest year not found in the CSV.")
+        return
+
+    base_row = base_row.iloc[0]
+    last_row = last_row.iloc[0]
+
+    # Build tidy frame of changes across columns
+    rows = []
+    for region in region_cols:
+        base_val = base_row[region]
+        last_val = last_row[region]
+        if pd.notna(base_val) and pd.notna(last_val) and base_val > 0:
+            pct = (last_val - base_val) / base_val * 100.0
+            rows.append((region, base_val, last_val, pct))
+
+    if not rows:
+        st.warning("No regions have valid data for both baseline and latest years.")
+        return
+
+    merged = pd.DataFrame(rows, columns=["region", "population_base", "population_last", "pct_change"])
+    merged = merged.sort_values("pct_change", ascending=True)
+
+    # Short labels
+    if rename_mapping is None:
+        rename_mapping = {}
+    short_labels = [rename_mapping.get(r, r) for r in merged["region"].tolist()]
+
+    # Colors: highlight SF + SJ in gold; others teal
+    highlight = {"San Francisco", "San Jose"}
+    colors = ["#eeaf30" if r in highlight else "#00aca2" for r in merged["region"]]
+
+    # Optional colored labels (example: color Sonoma if present)
+    colored_labels = []
+    for label in short_labels:
+        if "Sonoma" in label:
+            colored_labels.append(f'<span style="color:#d84f19">{label}</span>')
+        else:
+            colored_labels.append(label)
+
+    # Axis ticks (percent) with nice steps
+    def nice_step(span, target_ticks=6):
+        if span <= 0:
+            return 1
+        ideal = span / max(1, target_ticks)
+        power = 10 ** np.floor(np.log10(ideal))
+        for mult in (1, 2, 2.5, 5, 10):
+            step = mult * power
+            if step >= ideal:
+                return step
+        return 10 * power
+
+    vmin, vmax = float(merged["pct_change"].min()), float(merged["pct_change"].max())
+    rng = vmax - vmin if vmax > vmin else 1.0
+    pad = max(0.12 * rng, 2.0)
+    x_min, x_max = vmin - pad, vmax + pad
+    step = nice_step(x_max - x_min, target_ticks=6)
+    x_min_r = np.floor(x_min / step) * step
+    x_max_r = np.ceil(x_max / step) * step
+    ticks = np.arange(x_min_r, x_max_r + 0.5 * step, step)
+    tick_labels = [f"{t:.0f}%" for t in ticks]
+
+    # Title suffix
+    title_suffix = f"{baseline_year} to {latest_year}"
+
+    # Figure
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        y=colored_labels,
+        x=merged["pct_change"],
+        orientation="h",
+        marker_color=colors,
+        text=[f"{v:+.1f}%" for v in merged["pct_change"]],
+        textfont=dict(size=16, family="Avenir Light", color="black"),
+        textposition="outside",
+        hovertemplate=(
+            "%{y}"
+            "<br>Percent Change: %{x:.1f}%"
+            f"<br>{baseline_year} population: "+"%{customdata[0]:,.0f}"
+            f"<br>{latest_year} population: "+"%{customdata[1]:,.0f}<extra></extra>"
+        ),
+        customdata=list(zip(merged["population_base"], merged["population_last"]))
+    ))
+
+    # Grid lines
+    for x in ticks:
+        fig.add_shape(
+            type="line",
+            x0=x, y0=-0.5, x1=x, y1=len(merged) - 0.5,
+            line=dict(color="lightgray", width=1, dash="dash"),
+            layer="below"
+        )
+
+    fig.update_layout(
+        title=dict(
+            text=(
+                "Population Change by Metro/Region<br>"
+                f"<span style='font-size:20px; color:#666; font-family:Avenir Medium'>{title_suffix}</span>"
+            ),
+            x=0.5, xanchor="center",
+            font=dict(family="Avenir Black", size=26),
+        ),
+        margin=dict(l=220, r=110, t=80, b=50),
+        xaxis=dict(
+            title="Percent Change",
+            tickmode="array",
+            tickvals=ticks,
+            ticktext=tick_labels,
+            range=[x_min_r, x_max_r],
+            tickformat=".1f",
+            ticksuffix="%",
+            title_font=dict(family="Avenir Medium", size=25, color="black"),
+            tickfont=dict(family="Avenir", size=18, color="black"),
+        ),
+        yaxis=dict(
+            tickfont=dict(family="Avenir Black", size=18, color="black")
+        ),
+        showlegend=False,
+        height=700,
+    )
+    fig.update_traces(textposition="outside", cliponaxis=False)
+
+    st.plotly_chart(
+            fig, 
+            use_container_width=True,
+            config={
+                "toImageButtonOptions": {
+                    "format": "svg",
+                    "filename": "metro_population",
+                    "scale": 10          # higher scale = higher DPI
+                }
+            }
+    )
+    
+    st.markdown("""
+    <div style='font-size: 12px; color: #666; font-family: "Avenir", sans-serif;'>
+    <strong style='font-family: "Avenir Medium", sans-serif;'>Source: </strong>U.S. Census Bureau (Population and Housing Unit Estimates).<br>
+    <strong style='font-family: "Avenir Medium", sans-serif;'>Analysis:</strong> Bay Area Council Economic Institute.<br>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Summary table + download
+    st.subheader("Summary")
+    out = merged.copy()
+    out.rename(columns={
+        "region": "Region",
+        "population_base": f"{baseline_year} Population",
+        "population_last": f"{latest_year} Population",
+        "pct_change": "Percent Change"
+    }, inplace=True)
+    out["Percent Change"] = out["Percent Change"].map(lambda v: f"{v:+.1f}%")
+    # color negative red / positive green
+    def color_percent(val):
+        return 'color: red' if isinstance(val, str) and '-' in val else 'color: green'
+    st.dataframe(out.style.map(color_percent, subset=["Percent Change"]),
+                 use_container_width=True, hide_index=True)
+
+    st.download_button(
+        "Download summary (CSV)",
+        data=out.to_csv(index=False).encode("utf-8"),
+        file_name=f"metro_population_change_{baseline_year}_to_{latest_year}.csv",
+        mime="text/csv"
+    )
+
+def show_median_1br_rent_change_chart(
+    csv_path: str = "docs/data_build/1br_Rents_Bay_Area.csv",
+    title: str = "Percent Change in Median 1-Bedroom Rent",
+):
+    """
+    Renders a vertical bar chart of percent change in median 1-BR rents by region.
+    - Timeframes: Last Year, Since COVID-19
+    - X-axis: regions (sorted high → low)
+    - Y-axis: percent change
+    - Colors: California=#203864, others=#00aca2
+    """
+
+    # ---- UI: timeframe toggle ----
+    tf_choice = st.radio(
+        "Select Time Frame:",
+        ["Last Year", "Since COVID-19"],
+        index=0,
+        horizontal=True,
+        key="rent_change_tf"
+    )
+
+    # Target columns we want after normalization
+    want_cols = {
+        "region": "Region",
+        "lastyear": "Last Year",
+        "postcovid": "Post-Covid",
+    }
+
+    # ---- Load CSV robustly (comma or tab; strip BOM) ----
+    df = pd.DataFrame()
+    source_used = None
+    for p in [Path(csv_path), Path("/mnt/data/Median1BR_Rent_Change.csv")]:
+        if p.exists():
+            try:
+                df = pd.read_csv(p, sep=None, engine="python", encoding="utf-8-sig")
+            except Exception:
+                df = pd.read_csv(p, encoding="utf-8-sig")
+            source_used = str(p)
+            break
+
+    if df.empty:
+        st.error("Could not find the rent change CSV at docs/data_build/ or /mnt/data/.")
+        return
+
+    # ---- Normalize headers (lowercase, remove non-alphanumerics) ----
+    def norm(s: str) -> str:
+        s = str(s)
+        s = s.replace("\u00A0", " ")            # NBSP → space
+        s = s.lower()
+        s = re.sub(r"[^a-z0-9]", "", s)         # keep only a–z, 0–9
+        return s
+
+    norm_map = {col: norm(col) for col in df.columns}
+    df.columns = [norm_map[c] for c in df.columns]
+
+    # Required normalized headers
+    needed = {"region", "lastyear", "postcovid"}
+    if not needed.issubset(set(df.columns)):
+        st.error("CSV must include 'Region', 'Last Year', and 'Post-Covid' columns.")
+        st.write("Detected columns (after normalization):", list(df.columns))
+        return
+
+    # Clean region strings and values
+    df["region"] = df["region"].astype(str).str.replace("\u00A0", " ").str.strip()
+    df["lastyear"] = pd.to_numeric(df["lastyear"], errors="coerce")
+    df["postcovid"] = pd.to_numeric(df["postcovid"], errors="coerce")
+
+    # Choose series based on toggle
+    series_col = "lastyear" if tf_choice == "Last Year" else "postcovid"
+
+    plot_df = df.loc[:, ["region", series_col]].dropna().copy()
+    plot_df["pct"] = plot_df[series_col] * 100.0
+    if plot_df.empty:
+        st.warning("No valid rows to plot for the selected timeframe.")
+        return
+
+    # Sort: highest first (leftmost)
+    plot_df = plot_df.sort_values("pct", ascending=False).reset_index(drop=True)
+
+    # Colors: California = #203864, others = #00aca2
+    bar_colors = ["#203864" if r == "California" else "#00aca2" for r in plot_df["region"]]
+
+    # ---- Axis ticks (percent) with nice step & padding ----
+    def nice_step(span, target_ticks=6):
+        if span <= 0:
+            return 1
+        ideal = span / max(1, target_ticks)
+        power = 10 ** np.floor(np.log10(ideal))
+        for mult in (1, 2, 2.5, 5, 10):
+            step = mult * power
+            if step >= ideal:
+                return step
+        return 10 * power
+
+    vmin, vmax = float(plot_df["pct"].min()), float(plot_df["pct"].max())
+    rng = vmax - vmin if vmax > vmin else 1.0
+    pad = max(0.12 * rng, 2.0)  # percentage points
+    y_min, y_max = vmin - pad, vmax + pad
+    step = nice_step(y_max - y_min, target_ticks=6)
+    y_min_r = np.floor(y_min / step) * step
+    y_max_r = np.ceil(y_max / step) * step
+    yticks = np.arange(y_min_r, y_max_r + 0.5 * step, step)
+    ytick_labels = [f"{t:.0f}%" for t in yticks]
+
+    subtitle = tf_choice
+
+    # ---- Figure ----
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=plot_df["region"],
+        y=plot_df["pct"],
+        marker_color=bar_colors,
+        text=[f"{v:+.1f}%" for v in plot_df["pct"]],
+        textfont=dict(size=16, family="Avenir Light", color="black"),
+        textposition="outside",
+        hovertemplate="%{x}<br>Percent Change: %{y:.1f}%<extra></extra>",
+    ))
+
+    # Horizontal dashed grid lines
+    for y in yticks:
+        fig.add_shape(
+            type="line",
+            x0=-0.5, y0=y, x1=len(plot_df["region"]) - 0.5, y1=y,
+            line=dict(color="lightgray", width=1, dash="dash"),
+            layer="below"
+        )
+
+    fig.update_layout(
+        title=dict(
+            text=(
+                f"{title}<br>"
+                f"<span style='font-size:20px; color:#666; font-family:Avenir Medium'>{subtitle}</span>"
+            ),
+            x=0.5, xanchor="center",
+            font=dict(family="Avenir Black", size=26),
+        ),
+        margin=dict(l=60, r=40, t=80, b=120),
+        xaxis=dict(
+            title="Region",
+            tickfont=dict(family="Avenir Black", size=16, color="black"),
+            title_font=dict(family="Avenir Medium", size=20, color="black"),
+            tickangle=-30,
+        ),
+        yaxis=dict(
+            title="Percent Change",
+            tickmode="array",
+            tickvals=yticks,
+            ticktext=ytick_labels,
+            range=[y_min_r, y_max_r],
+            ticksuffix="%",
+            title_font=dict(family="Avenir Medium", size=20, color="black"),
+            tickfont=dict(family="Avenir", size=16, color="black"),
+            zeroline=True,
+            zerolinewidth=1,
+            zerolinecolor="lightgray",
+        ),
+        showlegend=False,
+        height=600,
+    )
+    fig.update_traces(cliponaxis=False)
+
+    st.plotly_chart(
+            fig, 
+            use_container_width=True,
+            config={
+                "toImageButtonOptions": {
+                    "format": "svg",
+                    "filename": "median_rents",
+                    "scale": 10          # higher scale = higher DPI
+                }
+            }
+    )
+    
+    st.markdown("""
+    <div style='font-size: 12px; color: #666; font-family: "Avenir", sans-serif;'>
+    <strong style='font-family: "Avenir Medium", sans-serif;'>Source: </strong>Apartment List.<br>
+    <strong style='font-family: "Avenir Medium", sans-serif;'>Analysis:</strong> Bay Area Council Economic Institute.<br>
+    </div>
+    <br>
+    """, unsafe_allow_html=True)
+
+    out = plot_df[["region", "pct"]].copy()
+    out.rename(columns={"region": "Region", "pct": f"Percent Change ({subtitle})"}, inplace=True)
+    out[f"Percent Change ({subtitle})"] = out[f"Percent Change ({subtitle})"].map(lambda v: f"{v:+.1f}%")
+    st.download_button(
+        "Download summary (CSV)",
+        data=out.to_csv(index=False).encode("utf-8"),
+        file_name=f"median_1br_rent_change_{subtitle.replace(' ', '_').lower()}.csv",
+        mime="text/csv"
+    )
+
+def show_avg_housing_permits_chart(
+    csv_path: str = "docs/data_build/Housing_Permits.csv",
+    title: str = "Average Housing Permits per 100,000 Residents by County",
+):
+    # --- UI: timeframe toggle ---
+    tf_choice = st.radio(
+        "Select Time Frame:",
+        ["2018 to 2024", "2023 to 2024"],
+        index=0,
+        horizontal=True,
+        key="permits_tf"
+    )
+
+    # Map the UI labels to CSV headers
+    col_map = {
+        "2018 to 2024": "2018-2024",
+        "2023 to 2024": "2023-2024",
+    }
+    value_col = col_map[tf_choice]
+
+    # --- Load CSV robustly (comma or tab; handle BOM) ---
+    df = pd.DataFrame()
+    source_used = None
+    for p in [Path(csv_path), Path("/mnt/data/Housing_Permits.csv")]:
+        if p.exists():
+            try:
+                df = pd.read_csv(p, sep=None, engine="python", encoding="utf-8-sig")
+            except Exception:
+                df = pd.read_csv(p, encoding="utf-8-sig")
+            source_used = str(p)
+            break
+
+    if df.empty:
+        st.error("Could not find the housing permits CSV at docs/data_build/ or /mnt/data/.")
+        return
+
+    # --- Normalize / validate columns ---
+    df.columns = [str(c).strip() for c in df.columns]
+    if "County" not in df.columns or value_col not in df.columns:
+        st.error(f"CSV must include 'County' and '{value_col}' columns.")
+        st.write("Detected columns:", list(df.columns))
+        return
+
+    df["County"] = df["County"].astype(str).str.replace("\u00A0", " ").str.strip()
+    df[value_col] = pd.to_numeric(df[value_col], errors="coerce")
+
+    plot_df = df[["County", value_col]].dropna().copy()
+    plot_df.rename(columns={value_col: "permits_per_100k"}, inplace=True)
+
+    if plot_df.empty:
+        st.warning("No valid rows to plot for the selected timeframe.")
+        return
+
+    # Sort: highest first (leftmost)
+    plot_df = plot_df.sort_values("permits_per_100k", ascending=False).reset_index(drop=True)
+
+    # Colors: all bars teal #00aca2
+    bar_colors = ["#00aca2"] * len(plot_df)
+
+    # --- Axis ticks (nice step & padding, not percent) ---
+    def nice_step(span, target_ticks=6):
+        if span <= 0:
+            return 1
+        ideal = span / max(1, target_ticks)
+        power = 10 ** np.floor(np.log10(ideal))
+        for mult in (1, 2, 2.5, 5, 10):
+            step = mult * power
+            if step >= ideal:
+                return step
+        return 10 * power
+
+    vmin, vmax = float(plot_df["permits_per_100k"].min()), float(plot_df["permits_per_100k"].max())
+    rng = vmax - vmin if vmax > vmin else 1.0
+    pad = max(0.12 * rng, 5.0)
+    y_min, y_max = max(0.0, vmin - pad), vmax + pad  # floor at 0 for readability
+    step = nice_step(y_max - y_min, target_ticks=6)
+    y_min_r = np.floor(y_min / step) * step
+    y_max_r = np.ceil(y_max / step) * step
+    yticks = np.arange(y_min_r, y_max_r + 0.5 * step, step)
+    # one decimal if values are < 1000, otherwise 0 decimals
+    if y_max_r < 1000:
+        ytick_labels = [f"{t:.1f}" for t in yticks]
+        text_fmt = lambda v: f"{v:,.1f}"
+    else:
+        ytick_labels = [f"{t:,.0f}" for t in yticks]
+        text_fmt = lambda v: f"{v:,.0f}"
+
+    subtitle = tf_choice
+
+    # --- Figure ---
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=plot_df["County"],
+        y=plot_df["permits_per_100k"],
+        marker_color=bar_colors,
+        text=[text_fmt(v) for v in plot_df["permits_per_100k"]],
+        textfont=dict(size=16, family="Avenir Light", color="black"),
+        textposition="outside",
+        hovertemplate="%{x}<br>Permits per 100,000: %{y:.1f}<extra></extra>",
+    ))
+
+    # Horizontal dashed grid lines
+    for y in yticks:
+        fig.add_shape(
+            type="line",
+            x0=-0.5, y0=y, x1=len(plot_df["County"]) - 0.5, y1=y,
+            line=dict(color="lightgray", width=1, dash="dash"),
+            layer="below"
+        )
+
+    fig.update_layout(
+        title=dict(
+            text=(
+                f"{title}<br>"
+                f"<span style='font-size:20px; color:#666; font-family:Avenir Medium'>{subtitle}</span>"
+            ),
+            x=0.5, xanchor="center",
+            font=dict(family="Avenir Black", size=26),
+        ),
+        margin=dict(l=60, r=40, t=80, b=120),
+        xaxis=dict(
+            title="County",
+            tickfont=dict(family="Avenir Black", size=16, color="black"),
+            title_font=dict(family="Avenir Medium", size=20, color="black"),
+            tickangle=-30,
+        ),
+        yaxis=dict(
+            title="Permits per 100,000 Residents",
+            tickmode="array",
+            tickvals=yticks,
+            ticktext=ytick_labels,
+            range=[y_min_r, y_max_r],
+            title_font=dict(family="Avenir Medium", size=20, color="black"),
+            tickfont=dict(family="Avenir", size=16, color="black"),
+            zeroline=True,
+            zerolinewidth=1,
+            zerolinecolor="lightgray",
+        ),
+        showlegend=False,
+        height=600,
+    )
+    fig.update_traces(cliponaxis=False)
+
+    st.plotly_chart(
+            fig, 
+            use_container_width=True,
+            config={
+                "toImageButtonOptions": {
+                    "format": "svg",
+                    "filename": "housing_permits",
+                    "scale": 10          # higher scale = higher DPI
+                }
+            }
+    )
+    
+    st.markdown("""
+    <div style='font-size: 12px; color: #666; font-family: "Avenir", sans-serif;'>
+    <strong style='font-family: "Avenir Medium", sans-serif;'>Source: </strong>U.S. Census Building Permit Survey, U.S. Census Population Estimates Program.<br>
+    <strong style='font-family: "Avenir Medium", sans-serif;'>Analysis:</strong> Bay Area Council Economic Institute.<br>
+    </div>
+    <br>
+    """, unsafe_allow_html=True)
+
+    out = plot_df.rename(columns={"permits_per_100k": f"Permits per 100k ({subtitle})"})
+    st.download_button(
+        "Download summary (CSV)",
+        data=out.to_csv(index=False).encode("utf-8"),
+        file_name=f"avg_housing_permits_per_100k_{subtitle.replace(' ', '_').lower()}.csv",
+        mime="text/csv"
+    )
+
 
 # --- Main Dashboard Block ---
 if section == "Employment":
@@ -4508,13 +5114,18 @@ if section == "Employment":
         create_jobs_ratio_chart()
 
 elif section == "Population":
-    if pop_subtab == "Population":
+    if pop_subtab == "Bay Area Counties":
         show_population_trend_chart()
+    elif pop_subtab == "Metropolitan Areas":
+        show_metro_population_change_chart()
 
 
 elif section == "Housing":
-    st.header("Housing")
-    st.write("Placeholder: housing graphs, charts, and tables.")
+    if housing_subtab == "Median Rents":
+        show_median_1br_rent_change_chart()
+    elif housing_subtab == "Housing Permits":
+        show_avg_housing_permits_chart()
+
 
 # elif section == "Investment":
 #     st.header("Investment")
