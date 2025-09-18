@@ -2451,7 +2451,7 @@ def show_job_recovery_overall(df_state, df_bay, df_us, df_sonoma, df_napa):
                 x=[latest_row["date"]],
                 y=[latest_row["pct_change"]],
                 mode="markers+text",
-                marker=dict(color="#00aca2", size=13),
+                marker=dict(color="#00aca2", size=10),
                 text=[f"{latest_row['pct_change']:.2f}%"],
                 textposition="bottom center",
                 textfont=dict(size=16, family="Avenir", color="#00aca2"),
@@ -3376,7 +3376,7 @@ def show_combined_industry_job_recovery_chart(bay_area_series_mapping, us_series
     with col2:
         metric_choice = st.radio(
             "Metric:",
-            ["Net Change", "Percent Change"],
+            ["Percent Change", "Net Change"],
             horizontal=True,
             key="industry_metric_select"
         )
@@ -4952,7 +4952,7 @@ def show_median_1br_rent_change_chart(
     out.rename(columns={"region": "Region", "pct": f"Percent Change ({subtitle})"}, inplace=True)
     out[f"Percent Change ({subtitle})"] = out[f"Percent Change ({subtitle})"].map(lambda v: f"{v:+.1f}%")
     st.download_button(
-        "Download summary (CSV)",
+        "Download Data (CSV)",
         data=out.to_csv(index=False).encode("utf-8"),
         file_name=f"median_1br_rent_change_{subtitle.replace(' ', '_').lower()}.csv",
         mime="text/csv"
@@ -5119,7 +5119,7 @@ def show_avg_housing_permits_chart(
 
     out = plot_df.rename(columns={"permits_per_100k": f"Permits per 100k ({subtitle})"})
     st.download_button(
-        "Download summary (CSV)",
+        "Download Data (CSV)",
         data=out.to_csv(index=False).encode("utf-8"),
         file_name=f"avg_housing_permits_per_100k_{subtitle.replace(' ', '_').lower()}.csv",
         mime="text/csv"
