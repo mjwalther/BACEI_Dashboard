@@ -5126,7 +5126,13 @@ def show_avg_housing_permits_chart(
     )
 
 
-# --- Main Dashboard Block ---
+
+
+# --- MAIN DASHBOARD SETUP WITH FUNCTIONS CALLED ---
+# This can be used as a guide to navigate the different
+# sections and subtabs of the dashboard, allowing you to
+# see what functions correspond to which visualizations.
+
 if section == "Employment":
 
     df_unemp = load_prebuilt_or_fetch(
