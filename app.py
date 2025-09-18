@@ -5150,7 +5150,7 @@ if section == "Employment":
         show_job_recovery_overall(df_rest_ca, df_bay, df_us, df_sonoma, df_napa)
         show_job_recovery_by_state(state_code_map, fetch_states_job_data)
 
-        # --- Sonoma County Outlook ---
+        # # --- Sonoma County Outlook ---
         # show_job_recovery_overall_v2(df_ca=df_ca, df_bay=df_bay, df_us=df_us, df_sonoma=df_sonoma)
 
     elif emp_subtab == "Monthly Change":
@@ -5163,8 +5163,8 @@ if section == "Employment":
                 "North Bay",
                 "East Bay",
                 "San Francisco-Peninsula",
-                "South Bay",
-                "Sonoma County"
+                "South Bay" #,
+                # "Sonoma County"
             ]
         )
 
