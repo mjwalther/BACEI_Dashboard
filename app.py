@@ -1331,29 +1331,6 @@ def fetch_and_process_job_data(series_id, region_name):
         st.error(f"Failed to fetch data for {region_name}: {e}")
         return None
     
-# def _fetch_bls_series_chunked(series_ids: list[str], start_year: int, end_year: int, api_key: str):
-#     """Fetch BLS timeseries in chunks of 25 (public API limit). Returns list of series dicts."""
-#     import requests, math
-#     all_series = []
-    
-#     for i in range(0, len(series_ids), 25):
-#         chunk = series_ids[i:i+25]
-#         payload = {
-#             "seriesid": chunk,
-#             "startyear": str(start_year),
-#             "endyear": str(end_year),
-#             "registrationKey": api_key,
-#         }
-#         try:
-#             resp = requests.post("https://api.bls.gov/publicAPI/v2/timeseries/data/",
-#                                  json=payload, timeout=30)
-#             data = resp.json()
-#             if "Results" in data and "series" in data["Results"]:
-#                 all_series.extend(data["Results"]["series"])
-#         except Exception as e:
-#             _warn(f"BLS fetch failed for chunk {i//25+1}: {e}")
-#     return all_series
-
 def _debug(msg):
     import sys
     print(f"[build] {msg}", file=sys.stderr, flush=True)
@@ -1703,6 +1680,20 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+st.markdown(
+    """
+    <style>
+        /* Adjust sidebar width */
+        [data-testid="stSidebar"] {
+            width: 230px !important;   /* Set your desired width */
+            min-width: 230px !important;
+            max-width: 230px !important;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 @st.cache_data(ttl=3600)
 def _load_version():
     import requests, json
@@ -1762,7 +1753,7 @@ housing_subtab = None
 if section == "Employment":
     emp_subtab = st.sidebar.radio(
         "Employment Views:",
-        ["Employment", "Unemployment", "Job Recovery", "Monthly Change", "Industry", "Office Sector", "Jobs Ratio"],
+        ["Job Recovery", "Monthly Change", "Jobs by Industry", "Office Jobs", "Unemployment Rate", "Employed Residents", "Job to Worker Ratio"],
         key="employment_subtab"
     )
 elif section == "Population":
@@ -1948,14 +1939,15 @@ def show_employment_comparison_chart(df):
     st.markdown("""
     <div style='font-size: 12px; color: #666; font-family: "Avenir", sans-serif;'>
     <strong style='font-family: "Avenir Medium", sans-serif;'>Source: </strong>Local Area Unemployment Statistics (LAUS), California Open Data Portal.<br>
+    <strong style='font-family: "Avenir Medium", sans-serif;'>Note: </strong>  LAUS data includes total employment, covering both farm jobs and self-employed. <br>
     <strong style='font-family: "Avenir Medium", sans-serif;'>Analysis:</strong> Bay Area Council Economic Institute.<br>
     </div>
     """, unsafe_allow_html=True)
 
     st.markdown("---")
 
-    # Recovery Snapshot
-    st.subheader("Recovery Snapshot")
+    # Employed Residents Snapshot
+    st.subheader("Employed Residents Snapshot")
     col1, col2, col3 = st.columns(3)
     
     with col1:
@@ -3651,7 +3643,8 @@ def show_combined_industry_job_recovery_chart(bay_area_series_mapping, us_series
 
     st.markdown(f"""
     <div style='font-size: 12px; color: #666; font-family: "Avenir", sans-serif;'>
-    <strong>Source:</strong> Bureau of Labor Statistics (BLS). <strong>Note:</strong> Total Non-Farm Employment data is seasonally adjusted, while other industries are not seasonally adjusted.<br>
+    <strong>Source:</strong> Bureau of Labor Statistics (BLS).<br>
+    <strong>Note:</strong> "Education" refers to private education, while public education is included under Government. Total Non-Farm Employment data are seasonally adjusted; other industry data are not.<br>
     <strong>Analysis:</strong> Bay Area Council Economic Institute.<br>
     </div>
     """, unsafe_allow_html=True)
@@ -4405,7 +4398,7 @@ def show_jobs_ratio_chart():
     
     fig.update_layout(
         title=dict(
-            text=f"Ratio of Jobs to Employed Persons<br>"
+            text=f"Ratio of Jobs to Employed Residents<br>"
                 f"<span style='font-size:20px; color:#666; font-family:Avenir Medium'>"
                 f"{latest_month} 2019 vs {latest_month} {latest_year}",
             x=0.5,
@@ -4466,8 +4459,8 @@ def show_jobs_ratio_chart():
     # Add explanation and sources
     st.markdown("""
     <div style='font-size: 12px; color: #666; font-family: "Avenir", sans-serif;'>
-    <strong style='font-family: "Avenir Medium", sans-serif;'>Source: </strong>Bureau of Labor Statistics (BLS) and Local Area Unemployment Statistics (LAUS), California Open Data Portal.<br>
-    <strong style='font-family: "Avenir Medium", sans-serif;'>Note: </strong>BLS data are seasonally adjusted nonfarm payroll jobs. LAUS data are total employment including farm jobs and self-employed. Each ratio uses the respective year's LAUS data as denominator. Bay Area Total includes all 7 metro divisions/MSAs.<br>
+    <strong style='font-family: "Avenir Medium", sans-serif;'>Source: </strong> Bureau of Labor Statistics (BLS) and Local Area Unemployment Statistics (LAUS), California Open Data Portal.<br>
+    <strong style='font-family: "Avenir Medium", sans-serif;'>Note: </strong> Ratio greater than 1 means more jobs than employed residents in a region.<br>BLS data are seasonally adjusted nonfarm payroll jobs. LAUS data are total employment including farm jobs and self-employed. <br> Each ratio uses the respective year's LAUS data as denominator. Bay Area Total includes all 7 metro divisions/MSAs.<br>
     <strong style='font-family: "Avenir Medium", sans-serif;'>Analysis:</strong> Bay Area Council Economic Institute.<br>
     </div>
     """, unsafe_allow_html=True)
@@ -5153,19 +5146,7 @@ if section == "Employment":
     df_napa = load_prebuilt_or_fetch("napa_payroll", fetch_napa_payroll_data)
     df_ca = load_prebuilt_or_fetch("california_payroll", fetch_california_payroll_data)
 
-    if emp_subtab == "Employment":
-        if df_unemp is not None:
-            show_employment_comparison_chart(df_unemp)
-        else:
-            st.warning("Unemployment dataset is unavailable.")
-
-    elif emp_subtab == "Unemployment":
-        if df_unemp is not None:
-            show_unemployment_rate_chart(df_unemp)
-        else:
-            st.warning("Unemployment dataset is unavailable right now.")
-
-    elif emp_subtab == "Job Recovery":
+    if emp_subtab == "Job Recovery":
         show_job_recovery_overall(df_rest_ca, df_bay, df_us, df_sonoma, df_napa)
         show_job_recovery_by_state(state_code_map, fetch_states_job_data)
 
@@ -5224,11 +5205,22 @@ if section == "Employment":
                     show_monthly_job_change_chart(df, region_choice)
                     create_job_change_summary_table(df)
 
-    elif emp_subtab == "Industry":
+    elif emp_subtab == "Jobs by Industry":
         show_combined_industry_job_recovery_chart(series_mapping_v2, us_series_mapping, BLS_API_KEY)
-    elif emp_subtab == "Office Sector":
+    elif emp_subtab == "Office Jobs":
         show_office_tech_recovery_chart(office_metros_mapping, BLS_API_KEY)
-    elif emp_subtab == "Jobs Ratio":
+    elif emp_subtab == "Employed Residents":
+        if df_unemp is not None:
+            show_employment_comparison_chart(df_unemp)
+        else:
+            st.warning("Employment dataset is unavailable.")
+
+    elif emp_subtab == "Unemployment Rate":
+        if df_unemp is not None:
+            show_unemployment_rate_chart(df_unemp)
+        else:
+            st.warning("Unemployment dataset is unavailable right now.")
+    elif emp_subtab == "Job to Worker Ratio":
         show_jobs_ratio_chart()
 
 elif section == "Population":
