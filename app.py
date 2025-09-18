@@ -17,22 +17,35 @@ import re
 from data_mappings import state_code_map, series_mapping, series_mapping_v2, bay_area_counties, regions, office_metros_mapping, rename_mapping, color_map, sonoma_mapping, us_series_mapping
 series_mapping.setdefault("states", state_code_map)
 
+# Try to load environment variables from a local .env file (for local dev).
+# If dotenv isn't installed, just skip without failing.
 try:
     from dotenv import load_dotenv
     load_dotenv()
 except Exception:
     pass
 
-
+# Flag to detect if running in CI (Continuous Integration) mode.
 ON_CI = os.getenv("DASHBOARD_BUILD") == "1"
 
 def _warn(msg):
+    """
+    Show a warning depending on the environment:
+    - In CI: print to logs
+    - Locally: display a Streamlit warning in the UI
+    """
     if ON_CI:
         print(f"[build warning] {msg}")
     else:
         st.warning(msg)
 
 def get_secret(name: str) -> str | None:
+    """
+    Retrieve a secret value in the following order:
+    1. Environment variable (os.getenv)
+    2. Streamlit secrets manager (st.secrets)
+    Returns None if not found.
+    """
     val = os.getenv(name)
     if val:
         return val
@@ -42,33 +55,53 @@ def get_secret(name: str) -> str | None:
     except Exception:
         return None
 
-BLS_API_KEY = get_secret("BLS_API_KEY")
-PREBUILT_BASE_URL = get_secret("PREBUILT_BASE_URL")
+# Load required secrets
+BLS_API_KEY = get_secret("BLS_API_KEY")                 # BLS API key
+PREBUILT_BASE_URL = get_secret("PREBUILT_BASE_URL")     # URL for prebuilt data
 
 if not BLS_API_KEY:
     st.error("Missing BLS_API_KEY. Set it as an environment variable or Streamlit secret.")
     st.stop()
 
+# Directory where generated artifacts (parquet, JSON, etc.) are stored.
 PAGES_OUT = Path("docs/data_build")
 PAGES_OUT.mkdir(parents=True, exist_ok=True)
 
+# Re-check PREBUILT_BASE_URL directly from env vars (default to blank if not set).
 PREBUILT_BASE_URL = os.getenv(
     "PREBUILT_BASE_URL",
-    ""  # leave blank to read local docs/data_build when developing
+    ""  # Leave empty → use local files instead of remote
 )
 
 def _write_parquet(df, name: str):
+    """
+    Save a DataFrame as a .parquet file into docs/data_build/.
+    - Removes any existing file with the same name before writing.
+    - Uses the provided 'name' as the filename stem.
+    """
     (PAGES_OUT / f"{name}.parquet").unlink(missing_ok=True)
     df.to_parquet(PAGES_OUT / f"{name}.parquet", index=False)
 
 def _read_parquet(name: str):
+    """
+    Read a .parquet file into a pandas DataFrame.
+    - If PREBUILT_BASE_URL is set, load remotely from GitHub Pages / CDN.
+    - Otherwise, load from the local docs/data_build/ directory.
+    """
     import pandas as pd
     if PREBUILT_BASE_URL:
-        # load from GitHub Pages / CDN
+        # Remote read (production / GitHub Pages)
         return pd.read_parquet(f"{PREBUILT_BASE_URL}/data_build/{name}.parquet")
+    # Local read (development / CI builds)
     return pd.read_parquet(PAGES_OUT / f"{name}.parquet")
 
 def _write_version():
+    """
+    Write a version.json file into docs/data_build/ with metadata:
+    - last_updated_unix: current time as a Unix timestamp
+    - last_updated_utc: current time in UTC (ISO 8601 format)
+    Used to track when data artifacts were last generated.
+    """
     (PAGES_OUT / "version.json").write_text(json.dumps({
         "last_updated_unix": int(time.time()),
         "last_updated_utc": pd.Timestamp.utcnow().isoformat()
@@ -256,7 +289,27 @@ def build_metros_office_sector_employment_df_exact(api_key: str) -> pd.DataFrame
 
 def build_all_tables():
     """
-    Reuse existing fetching/processing functions to build the exact DataFrames the charts need.
+    Fetch, process, and persist all core datasets required for the dashboard.
+
+    This function orchestrates the execution of multiple specialized fetching
+    and processing routines (e.g., Bay Area payroll, Sonoma payroll, U.S. payroll,
+    unemployment, industry exports, office/tech metros). Each resulting DataFrame
+    is written to disk (CSV/Parquet + metadata) via `_write_artifacts` and added
+    to an in-memory dictionary for immediate downstream use.
+
+    Behavior:
+        - Calls region-specific fetch functions (Bay Area, Sonoma, Napa, U.S., states).
+        - Processes unemployment and industry-level job recovery data.
+        - Builds derived datasets such as office/tech metro employment.
+        - Each dataset is wrapped in error handling; failures log a warning
+          instead of halting the entire build.
+        - Updates `manifest.csv` and `version.json` to reflect available artifacts.
+        - In CI mode (`ON_CI`), raises an error if no manifest rows were produced.
+
+    Returns:
+        dict[str, pd.DataFrame]: A dictionary mapping dataset keys
+        (e.g., "bay_area_payroll", "us_payroll", "industry_job_recovery")
+        to their corresponding processed DataFrames.
     """
     tables = {}
 
@@ -971,7 +1024,6 @@ def fetch_states_job_data(series_ids):
 
 
 # --- POPULATION  ---
-# ---------- Data loader ----------
 @st.cache_data(show_spinner=False)
 def load_population_data() -> tuple[pd.DataFrame, str]:
     """
@@ -1054,6 +1106,9 @@ def _guess_bay_area_label(regions: list[str]) -> str | None:
 
 def show_population_trend_chart():
     """
+    Dashboard Section: Population
+    Dashboard Subtab: Counties
+
     Renders the Population line chart with a region multiselect.
     - Defaults to Bay Area (9-County) if present, else the first region.
     """
@@ -1120,11 +1175,10 @@ def show_population_trend_chart():
                     )
     
     fig.update_yaxes(separatethousands=True,
-                     title_font=dict(family="Avenir Medium", size=18, color="black"),
+                     title_font=dict(family="Avenir Medium", size=22, color="black"),
                      tickfont=dict(family="Avenir", size=16, color="black")
                     )
 
-    # Nice hover
     fig.update_traces(hovertemplate="<b>%{fullData.name}</b><br>Year: %{x}<br>Population: %{y:,}<extra></extra>")
 
     st.plotly_chart(
@@ -1134,7 +1188,7 @@ def show_population_trend_chart():
                 "toImageButtonOptions": {
                     "format": "svg",
                     "filename": "county_population",
-                    "scale": 10          # higher scale = higher DPI
+                    "scale": 10 
                 }
             }
     )
@@ -1151,7 +1205,7 @@ def show_population_trend_chart():
     # Download the filtered data
     csv = plot_df.sort_values(["region", "year"]).to_csv(index=False)
     st.download_button(
-        "Download displayed data (CSV)",
+        "Download Data (CSV)",
         data=csv,
         file_name="population_selected_regions.csv",
         mime="text/csv",
@@ -1480,6 +1534,32 @@ if os.getenv("DASHBOARD_BUILD") == "1":
 
 
 def show_data_downloads():
+    """
+    Display a Streamlit page for exploring and downloading prebuilt CSV datasets.
+
+    This function loads a `manifest.csv` file (either from a remote GitHub Pages/CDN
+    URL defined in `PREBUILT_BASE_URL` or from a local `docs/data_build` folder) and
+    provides an interactive interface to search, preview, and download datasets.
+
+    Features:
+        - Loads the dataset manifest (`manifest.csv`) describing available files,
+          their paths, row/column counts, and optional schema information.
+        - Provides a search bar to filter files by name or description.
+        - Allows filtering by top-level folder (derived from file paths).
+        - Displays metadata (rows, columns) and an expandable preview (first 200 rows).
+        - Optionally shows schema information if present in the manifest.
+        - Provides both:
+            * A "Download CSV" button to download the file directly.
+            * A link to open the raw CSV (local path or CDN URL).
+
+    Behavior:
+        - If `PREBUILT_BASE_URL` is set, files are loaded from that remote base URL.
+        - If not set, falls back to local paths under `PAGES_OUT`.
+        - If the manifest cannot be loaded, shows a Streamlit warning.
+
+    Returns:
+        None. Renders the interactive interface directly in Streamlit.
+    """
     import pandas as pd, requests, os
     from io import StringIO
 
@@ -1688,13 +1768,13 @@ if section == "Employment":
 elif section == "Population":
     pop_subtab = st.sidebar.radio(
         "Population Views:",
-        ["Bay Area Counties", "Metropolitan Areas"],
+        ["Counties", "Metro Areas"],
         key="population_subtab"
     )
 elif section == "Housing":
     housing_subtab = st.sidebar.radio(
         "Housing Views:",
-        ["Median Rents", "Housing Permits"],
+        ["Rent Trends", "Housing Permits"],
         key="housing_subtab"
     )
 
@@ -1731,6 +1811,9 @@ with st.sidebar:
 
 def show_employment_comparison_chart(df):
     """
+    Dashboard Section: Employment
+    Dashboard Subtab: Employment
+
     Displays a side-by-side bar chart comparing employment levels in Bay Area counties 
     between February 2020 (pre-pandemic baseline) and the latest available month.
 
@@ -1856,9 +1939,9 @@ def show_employment_comparison_chart(df):
             use_container_width=True,
             config={
                 "toImageButtonOptions": {
-                    "format": "png",   # or 'svg'
+                    "format": "svg",
                     "filename": "county_employment",
-                    "scale": 5          # higher scale = higher DPI
+                    "scale": 10         
                 }
             }
     )
@@ -1869,10 +1952,9 @@ def show_employment_comparison_chart(df):
     </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("---")  # Add separator line
+    st.markdown("---")
 
-
-    # Summary Statistics
+    # Recovery Snapshot
     st.subheader("Recovery Snapshot")
     col1, col2, col3 = st.columns(3)
     
@@ -1887,11 +1969,9 @@ def show_employment_comparison_chart(df):
     with col3:
         total_change = comparison_df['Change'].sum()
         st.metric("Total Employment Change", f"{total_change:,.0f}")
-    
 
-
-    # Detailed Comparison Table
-    st.subheader("Detailed Comparison")
+    # Summary Table
+    st.subheader("Summary")
     latest_col_label = comparison_df["Latest Date"].iloc[0].strftime("%b %Y")
 
     display_df = comparison_df[['County', 'Feb 2020', 'Latest', 'Change', 'Pct Change']].copy()
@@ -1919,9 +1999,12 @@ def show_employment_comparison_chart(df):
 
 def show_unemployment_rate_chart(df):
     """
+    Dashboard Section: Employment
+    Dashboard Subtab: Unemployment
+
     Displays an interactive line chart of unemployment rate trends for Bay Area counties.
 
-    Provides a checkbox to select all counties by default, and a multiselect option 
+    Provides a checkbox to select all counties, and a multiselect option 
     for users to customize which counties to display. The chart shows the unemployment 
     rate over time, with quarterly ticks (January, April, July, October) on the x-axis.
 
@@ -1960,7 +2043,7 @@ def show_unemployment_rate_chart(df):
 
     # Calculate Bay Area unemployment rate
     bay_area_agg['UnemploymentRate'] = (bay_area_agg['Unemployment'] / bay_area_agg['LaborForce']) * 100
-    bay_area_agg['County'] = '9-county Bay Area'
+    bay_area_agg['County'] = 'Bay Area (9-county)'
     
     bay_area_trend_df = bay_area_agg[['County', 'date', 'UnemploymentRate']]
 
@@ -1984,7 +2067,7 @@ def show_unemployment_rate_chart(df):
 
     # Style the Bay Area trend line differently
     for trace in fig.data:
-        if trace.name == '9-county Bay Area':
+        if trace.name == 'Bay Area (9-county)':
             trace.update(
                 line=dict(width=2, color="black"),
                 marker=dict(size=8, color="black")
@@ -2002,7 +2085,7 @@ def show_unemployment_rate_chart(df):
         ),
         xaxis=dict(
             title="Date",
-            title_font=dict(family="Avenir Medium", size=18, color="black"),
+            title_font=dict(family="Avenir Medium", size=22, color="black"),
             tickvals = quarterly_ticks,
             tickformat="%b %Y",
             ticktext = [
@@ -2016,28 +2099,28 @@ def show_unemployment_rate_chart(df):
         yaxis=dict(
             title="Unemployment Rate",
             ticksuffix="%",
-            title_font=dict(family="Avenir Medium", size=18, color="black"),
-            tickfont=dict(family="Avenir", size=14, color="black")
+            title_font=dict(family="Avenir Medium", size=22, color="black"),
+            tickfont=dict(family="Avenir", size=16, color="black")
         ),
         legend=dict(
             title=dict(
-                text="Region",
+                text="",
                 font=dict(
-                    family="Avenir Black",
-                    size=14,
-                    color="black"
+                    family="Avenir",
+                    size=20,
+                    color="Black"
                 )
             ),
             font=dict(
                 family="Avenir",
-                size=15,
+                size=20,
                 color="black"
             ),
             orientation="v",
             x=1.01,
             y=1
         ),
-        title_font = dict(family="Avenir Black", size=20)
+        title_font = dict(family="Avenir Black", size=26)
     )
 
     fig.update_xaxes(hoverformat="%b")
@@ -2050,9 +2133,9 @@ def show_unemployment_rate_chart(df):
             use_container_width=True,
             config={
                 "toImageButtonOptions": {
-                    "format": "png",   # or 'svg'
+                    "format": "svg",
                     "filename": "county_unemployment_rates",
-                    "scale": 5
+                    "scale": 10
                 }
             }
     )
@@ -2064,7 +2147,7 @@ def show_unemployment_rate_chart(df):
     </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("---")  # Add separator line
+    st.markdown("---")
 
     # Summary Table
     st.subheader('Summary')
@@ -2227,7 +2310,8 @@ def show_job_recovery_overall_v2(df_ca, df_bay, df_us, df_sonoma):
                 "Percent Change in Non-Farm Payroll Jobs From February 2020 to "
                 + latest_date.strftime('%B %Y') + "</span>"
             ),
-            x=0.5, xanchor='center'
+            x=0.5,
+            xanchor='center'
         ),
         xaxis=dict(
             title='Date',
@@ -2272,6 +2356,9 @@ def show_job_recovery_overall_v2(df_ca, df_bay, df_us, df_sonoma):
 
 def show_job_recovery_overall(df_state, df_bay, df_us, df_sonoma, df_napa):
     """
+    Dashboard Section: Employment
+    Dashboard Subtab: Job Recovery
+
     Visualizes overall job recovery trends since February 2020 for the Bay Area, 
     the rest of California, and the United States.
 
@@ -2402,7 +2489,7 @@ def show_job_recovery_overall(df_state, df_bay, df_us, df_sonoma, df_napa):
             )
         )
 
-        # # SONOMA (will delete later)
+        # # SONOMA
         # fig.add_trace(
         #     go.Scatter(
         #         x=df_sonoma["date"],
@@ -2430,7 +2517,7 @@ def show_job_recovery_overall(df_state, df_bay, df_us, df_sonoma, df_napa):
         #     )
         # )
 
-        # # NAPA (will delete later)
+        # # NAPA
         # fig.add_trace(
         #     go.Scatter(
         #         x=df_napa["date"],
@@ -2478,7 +2565,7 @@ def show_job_recovery_overall(df_state, df_bay, df_us, df_sonoma, df_napa):
         fig.update_layout(
             title=dict(
                 text=(
-                    "<span style='font-size:20px; font-family:Avenir Black'>Job Recovery Since the Pandemic</span><br>"
+                    "<span style='font-size:26px; font-family:Avenir Black'>Job Recovery Since the Pandemic</span><br>"
                     "<span style='font-size:17px; color:#666; font-family:Avenir Medium'>"
                     "Percent Change in Non-Farm Payroll Jobs From February 2020 to " 
                     + latest_date.strftime('%B %Y') + "</span>"
@@ -2488,7 +2575,7 @@ def show_job_recovery_overall(df_state, df_bay, df_us, df_sonoma, df_napa):
             ),
             xaxis=dict(
                 title='Date',
-                title_font=dict(family="Avenir Medium", size=18, color="black"),
+                title_font=dict(family="Avenir Medium", size=22, color="black"),
                 tickfont=dict(family="Avenir", size=16, color="black"),
                 tickvals=quarterly_ticks,
                 ticktext=ticktext,
@@ -2500,7 +2587,7 @@ def show_job_recovery_overall(df_state, df_bay, df_us, df_sonoma, df_napa):
                 title='Percent Change Since Feb 2020',
                 ticksuffix="%",
                 title_font=dict(family="Avenir Medium", size=18, color="black"),
-                tickfont=dict(family="Avenir", size=14, color="black"),
+                tickfont=dict(family="Avenir", size=16, color="black"),
                 showgrid=True,
                 gridcolor="#CCCCCC",
                 gridwidth=1,
@@ -2511,8 +2598,8 @@ def show_job_recovery_overall(df_state, df_bay, df_us, df_sonoma, df_napa):
                 title=dict(
                     text="Region",
                     font=dict(
-                        family="Avenir Black",  # Bold/dark font
-                        size=18,
+                        family="Avenir Black",
+                        size=20,
                         color="black"
                     )
                 ),
@@ -2528,7 +2615,7 @@ def show_job_recovery_overall(df_state, df_bay, df_us, df_sonoma, df_napa):
         )
 
 
-        # # Vertical dashed lines to separate time series (e.g. tech recession, COVID, etc.)
+        # # --- Vertical dashed lines to separate time series (e.g. tech recession, COVID, etc.) ---
         # fig.add_vline(
         #     x=pd.to_datetime("2021-02-01"),
         #     line_dash="dash",
@@ -2560,9 +2647,9 @@ def show_job_recovery_overall(df_state, df_bay, df_us, df_sonoma, df_napa):
             use_container_width=True,
             config={
                 "toImageButtonOptions": {
-                    "format": "png",   # or 'svg'
+                    "format": "svg",
                     "filename": "job_recovery",
-                    "scale": 5          # higher scale = higher DPI
+                    "scale": 10
                 }
             }
         )
@@ -2571,54 +2658,58 @@ def show_job_recovery_overall(df_state, df_bay, df_us, df_sonoma, df_napa):
         <strong>Source:</strong> Bureau of Labor Statistics (BLS). <strong>Note:</strong> Data are seasonally adjusted.<br>
         <strong>Analysis:</strong> Bay Area Council Economic Institute.<br>
         </div>
+        <br>
         """, unsafe_allow_html=True)
 
-        st.markdown("---")  # Add separator line
+        # st.markdown("---")
 
 
-        # # BAY AREA EMPLOYMENT SUMMARY
-        # bay_feb_2020 = df_bay[df_bay["date"] == "2020-02-01"]["value"]
-        # bay_latest = df_bay.iloc[-1]
+        # BAY AREA EMPLOYMENT SUMMARY
+        bay_feb_2020 = df_bay[df_bay["date"] == "2020-02-01"]["value"]
+        bay_latest = df_bay.iloc[-1]
         
-        # if not bay_feb_2020.empty:
-        #     baseline_jobs = bay_feb_2020.iloc[0]
-        #     latest_jobs = bay_latest["value"]
-        #     job_change = latest_jobs - baseline_jobs
+        if not bay_feb_2020.empty:
+            baseline_jobs = bay_feb_2020.iloc[0]
+            latest_jobs = bay_latest["value"]
+            job_change = latest_jobs - baseline_jobs
             
-        #     # Display summary before the chart
-        #     st.markdown("### Bay Area Employment Summary")
+            # Display summary before the chart
+            st.markdown("### Bay Area Employment Snapshot")
             
-        #     col1, col2, col3 = st.columns(3)
+            col1, col2, col3 = st.columns(3)
             
-        #     with col1:
-        #         st.metric(
-        #             label="February 2020 (Baseline)",
-        #             value=f"{baseline_jobs:,.0f}",
-        #             help="Total nonfarm payroll jobs in Bay Area"
-        #         )
+            with col1:
+                st.metric(
+                    label="February 2020 (Baseline)",
+                    value=f"{baseline_jobs:,.0f}",
+                    help="Total nonfarm payroll jobs in Bay Area"
+                )
             
-        #     with col2:
-        #         st.metric(
-        #             label=f"{bay_latest['date'].strftime('%B %Y')} (Latest)",
-        #             value=f"{latest_jobs:,.0f}",
-        #             delta=f"{job_change:+,.0f}",
-        #             help="Current total nonfarm payroll jobs in Bay Area"
-        #         )
+            with col2:
+                st.metric(
+                    label=f"{bay_latest['date'].strftime('%B %Y')} (Latest)",
+                    value=f"{latest_jobs:,.0f}",
+                    delta=f"{job_change:+,.0f}",
+                    help="Current total nonfarm payroll jobs in Bay Area"
+                )
             
-        #     with col3:
-        #         pct_change = bay_latest["pct_change"]
-        #         st.metric(
-        #             label="Recovery Rate",
-        #             value=f"{pct_change:+.1f}%",
-        #             help="Percent change from February 2020 baseline"
-        #         )
+            with col3:
+                pct_change = bay_latest["pct_change"]
+                st.metric(
+                    label="Recovery Rate",
+                    value=f"{pct_change:+.1f}%",
+                    help="Percent change from February 2020 baseline"
+                )
             
-        #     st.markdown("---")  # Add separator line
+            st.markdown("---")
     
 
 
 def show_job_recovery_by_state(state_code_map, fetch_states_job_data):
     """
+    Dashboard Section: Employment
+    Dashboard Subtab: Job Recovery
+
     Visualizes state-level job recovery since February 2020 across selected U.S. states.
 
     Creates an interactive line chart showing the percent change in nonfarm payroll employment 
@@ -2706,10 +2797,8 @@ def show_job_recovery_by_state(state_code_map, fetch_states_job_data):
 
         # Prevent last-point labels from being clipped
         for i, tr in enumerate(fig_states.data):
-            if tr.mode and "text" in tr.mode:  # your marker+text traces
+            if tr.mode and "text" in tr.mode:
                 fig_states.data[i].update(cliponaxis=False)
-
-        # fig = go.Figure()
 
         fig_states.add_hline(
             y=0,
@@ -2722,7 +2811,7 @@ def show_job_recovery_by_state(state_code_map, fetch_states_job_data):
         fig_states.update_layout(
             title=dict(
                 text=(
-                    "<span style='font-size:20px; font-family:Avenir Black'>State Job Recovery Since the Pandemic</span><br>"
+                    "<span style='font-size:26px; font-family:Avenir Black'>Job Recovery by State Since the Pandemic</span><br>"
                     "<span style='font-size:17px; color:#666; font-family:Avenir Medium'>"
                     "Percent Change in Non-Farm Payroll Jobs From February 2020 to " 
                     + latest_common_date.strftime('%B %Y') + "</span>"
@@ -2732,7 +2821,7 @@ def show_job_recovery_by_state(state_code_map, fetch_states_job_data):
             ),
             xaxis=dict(
                 title='Date',
-                title_font=dict(family="Avenir Medium", size=18, color="black"),
+                title_font=dict(family="Avenir Medium", size=22, color="black"),
                 tickfont=dict(family="Avenir", size=16, color="black"),
                 tickvals=quarterly_ticks,
                 ticktext=ticktext,
@@ -2744,7 +2833,7 @@ def show_job_recovery_by_state(state_code_map, fetch_states_job_data):
                 title='Percent Change Since Feb 2020',
                 ticksuffix="%",
                 title_font=dict(family="Avenir Medium", size=18, color="black"),
-                tickfont=dict(family="Avenir", size=14, color="black"),
+                tickfont=dict(family="Avenir", size=16, color="black"),
                 showgrid=True,
                 gridcolor="#CCCCCC",
                 gridwidth=1,
@@ -2755,8 +2844,8 @@ def show_job_recovery_by_state(state_code_map, fetch_states_job_data):
                 title=dict(
                     text="State",
                     font=dict(
-                        family="Avenir Black",  # Bold/dark font
-                        size=18,
+                        family="Avenir Black",
+                        size=20,
                         color="black"
                     )
                 ),
@@ -2784,9 +2873,9 @@ def show_job_recovery_by_state(state_code_map, fetch_states_job_data):
             use_container_width=True,
             config={
                 "toImageButtonOptions": {
-                    "format": "png",   # or 'svg'
+                    "format": "svg",
                     "filename": "states_job_recovery",
-                    "scale": 5          # higher scale = higher DPI
+                    "scale": 10
                 }
             }
         )
@@ -2798,8 +2887,11 @@ def show_job_recovery_by_state(state_code_map, fetch_states_job_data):
         """, unsafe_allow_html=True)
 
 
-def create_monthly_job_change_chart(df, region_name):
+def show_monthly_job_change_chart(df, region_name):
     """
+    Dashboard Section: Employment
+    Dashboard Subtab: Monthly Change
+
     Creates a monthly job change bar chart for a specified Bay Area region.
 
     The function:
@@ -2847,12 +2939,12 @@ def create_monthly_job_change_chart(df, region_name):
         start_date = (data_last - pd.DateOffset(months=n_months-1)).to_period("M").to_timestamp()
 
 
-    # --- TEMPORARY OVERRIDE FOR CUSTOM WINDOW: EDIT AS DESIRED ---
-    FORCE_WINDOW = True
-    if FORCE_WINDOW:
-        start_date = pd.to_datetime("2022-01-01")
-        data_last = pd.to_datetime("2025-07-01").to_period("M").to_timestamp()
-    # --------------------------------------------------------------
+    # # --- TEMPORARY OVERRIDE FOR CUSTOM WINDOW: EDIT AS DESIRED ---
+    # FORCE_WINDOW = True
+    # if FORCE_WINDOW:
+    #     start_date = pd.to_datetime("2022-01-01")
+    #     data_last = pd.to_datetime("2025-07-01").to_period("M").to_timestamp()
+    # # --------------------------------------------------------------
 
     # --- Filter to selected window ---
     df = df[(df["date"] >= start_date) & (df["date"] <= data_last)].sort_values("date")
@@ -2912,7 +3004,7 @@ def create_monthly_job_change_chart(df, region_name):
     elif n_bars <= 36:     
         label_size = 12
     else:                 
-        label_size = 6
+        label_size = 7
 
     fig.update_traces(
         textposition="outside",
@@ -2935,7 +3027,7 @@ def create_monthly_job_change_chart(df, region_name):
     fig.update_layout(
         title=dict(
                 text=(
-                    f"<span style='font-size:20px; font-family:Avenir Black'>Monthly Job Changes in {region_name}</span><br>"
+                    f"<span style='font-size:24px; font-family:Avenir Black'>Monthly Job Changes in {region_name}</span><br>"
                     f"<span style='font-size:17px; color:#666; font-family:Avenir Medium'>{subtitle}</span>"
                 ),
                 x=0.5,
@@ -2943,8 +3035,8 @@ def create_monthly_job_change_chart(df, region_name):
         ),
         xaxis=dict(
             title='Month',
-            title_font=dict(family="Avenir Black", size=18, color="black"),
-            tickfont=dict(family="Avenir Medium", size=16, color="black"),
+            title_font=dict(family="Avenir Medium", size=22, color="black"),
+            tickfont=dict(family="Avenir", size=16, color="black"),
             tickvals = quarterly_ticks,
             tickformat="%b\n%Y",
             ticktext = [
@@ -2968,7 +3060,7 @@ def create_monthly_job_change_chart(df, region_name):
             use_container_width=True,
             config={
                 "toImageButtonOptions": {
-                    "format": "svg",   # or 'svg'
+                    "format": "svg",
                     "filename": "monthly_job_change",
                     "scale": 10
                 }
@@ -2983,6 +3075,8 @@ def create_monthly_job_change_chart(df, region_name):
                 East Bay (Oakland-Fremont-Berkeley MD). South Bay (San Jose-Sunnyvale-Santa Clara). San Francisco-Peninsula (San Francisco-San Mateo-Redwood City MD).<br>
     </div>
     """, unsafe_allow_html=True)
+
+    st.markdown("---")
 
 
 def create_job_change_summary_table(df):
@@ -3001,7 +3095,7 @@ def create_job_change_summary_table(df):
         df (pd.DataFrame): A DataFrame containing monthly job change data with 
                         columns ['date', 'monthly_change', 'label', 'color'].
     """
-    
+        
     st.subheader("Summary")
     
     # Get key statistics
@@ -3038,6 +3132,9 @@ def create_job_change_summary_table(df):
 
 def show_bay_area_monthly_job_change(df_bay):
     """
+    Dashboard Section: Employment
+    Dashboard Subtab: Monthly Change
+
     Displays a monthly job change bar chart for the Bay Area region (aggregated across all subregions).
 
     Calculates monthly changes in total employment from February 2020 onward, and visualizes the data 
@@ -3117,14 +3214,14 @@ def show_bay_area_monthly_job_change(df_bay):
     n_bars = len(window)
 
     # Choose font size dynamically based on bar count
-    if n_bars <= 12:
+    if n_bars <= 12:       
         label_size = 16
-    elif n_bars <= 24:
+    elif n_bars <= 24:     
         label_size = 14
-    elif n_bars <= 36:
+    elif n_bars <= 36:     
         label_size = 12
-    else:
-        label_size = 8
+    else:                 
+        label_size = 7
 
     fig.update_traces(
         textposition="outside",
@@ -3165,7 +3262,7 @@ def show_bay_area_monthly_job_change(df_bay):
     fig.update_layout(
         title=dict(
                 text=(
-                    f"<span style='font-size:20px; font-family:Avenir Black'>Monthly Job Changes in the Bay Area</span><br>"
+                    f"<span style='font-size:24px; font-family:Avenir Black'>Monthly Job Changes in the Bay Area</span><br>"
                     f"<span style='font-size:17px; color:#666; font-family:Avenir Medium'>{subtitle}</span>"
                 ),
                 x=0.5,
@@ -3173,8 +3270,8 @@ def show_bay_area_monthly_job_change(df_bay):
         ),
         xaxis=dict(
             title="Month",
-            title_font=dict(family="Avenir Black", size=18, color="black"),
-            tickfont=dict(family="Avenir Medium", size=16, color="black"),
+            title_font=dict(family="Avenir Medium", size=22, color="black"),
+            tickfont=dict(family="Avenir", size=16, color="black"),
             tickmode="array",
             tickvals=quarterly_ticks,
             tickformat="%b\n%Y",
@@ -3200,9 +3297,9 @@ def show_bay_area_monthly_job_change(df_bay):
         use_container_width=True,
         config={
             "toImageButtonOptions": {
-                "format": "png",
+                "format": "svg",
                 "filename": "bay_area_monthly_job_change",
-                "scale": 5,
+                "scale": 10,
             }
         },
     )
@@ -3213,6 +3310,8 @@ def show_bay_area_monthly_job_change(df_bay):
     <strong style='font-family: "Avenir Medium", sans-serif;'>Note: </strong> Data are seasonally adjusted.<br>
     <strong style='font-family: "Avenir Medium", sans-serif;'>Analysis: </strong> Bay Area Council Economic Institute.<br>
     """, unsafe_allow_html=True)
+
+    st.markdown("---")
 
     # Summary Table
     st.subheader("Summary")
@@ -3250,11 +3349,12 @@ def show_bay_area_monthly_job_change(df_bay):
 
 def show_combined_industry_job_recovery_chart(bay_area_series_mapping, us_series_mapping, BLS_API_KEY):
     """
+    Dashboard Section: Employment
+    Dashboard Subtab: Industry
+
     Horizontal bar chart of job recovery by industry with region + time frame + metric selectors.
     Matches the time-frame behavior of show_office_tech_recovery_chart.
     """
-
-    st.subheader("Job Recovery by Industry")
 
     # --- Controls ---
     region_choice = st.selectbox(
@@ -3412,7 +3512,6 @@ def show_combined_industry_job_recovery_chart(bay_area_series_mapping, us_series
         st.error("No industries have sufficient data for net change comparison")
         return
 
-    # --- Axis helpers (same as your existing logic) ---
     def nice_step(data_range, target_ticks=8):
         if data_range <= 0:
             return 1
@@ -3526,7 +3625,7 @@ def show_combined_industry_job_recovery_chart(bay_area_series_mapping, us_series
             tickvals=tick_positions,
             ticktext=tick_labels,
             range=[x_min_rounded, x_max_rounded],
-            title_font=dict(family="Avenir Medium", size=21, color="black"),
+            title_font=dict(family="Avenir Medium", size=22, color="black"),
             tickfont=dict(family="Avenir", size=16, color="black"),
         ),
         yaxis=dict(
@@ -3557,6 +3656,8 @@ def show_combined_industry_job_recovery_chart(bay_area_series_mapping, us_series
     </div>
     """, unsafe_allow_html=True)
 
+    st.markdown("---")
+
     # --- Summary table ---
     st.subheader("Summary")
     summary_df = pd.DataFrame({
@@ -3580,6 +3681,9 @@ def show_combined_industry_job_recovery_chart(bay_area_series_mapping, us_series
 
 def show_office_tech_recovery_chart(office_metros_mapping, BLS_API_KEY):
     """
+    Dashboard Section: Employment
+    Dashboard Subtab: Office Sector
+
     Displays a horizontal bar chart showing percent change in Office/Tech sector jobs 
     for selected metro areas, with a toggle between:
     - Since Feb 2020
@@ -3594,8 +3698,6 @@ def show_office_tech_recovery_chart(office_metros_mapping, BLS_API_KEY):
     Returns:
         None. Displays chart and summary in Streamlit.
     """
-
-    st.subheader("Office Sector Job Recovery by Metro Area")
 
     with st.container():
         c1, c2 = st.columns([1, 1])
@@ -3830,11 +3932,11 @@ def show_office_tech_recovery_chart(office_metros_mapping, BLS_API_KEY):
             range=[x_min_rounded, x_max_rounded],
             tickformat=".1f" if is_percent_axis else ",.0f",
             ticksuffix="%" if is_percent_axis else "",
-            title_font=dict(family="Avenir Medium", size=25, color="black"),
+            title_font=dict(family="Avenir Medium", size=22, color="black"),
             tickfont=dict(family="Avenir", size=18, color="black"),
         ),
         yaxis=dict(
-            tickfont=dict(family="Avenir Black", size=18, color="black")
+            tickfont=dict(family="Avenir Medium", size=20, color="black")
         ),
         showlegend=False,
         height=700
@@ -3842,7 +3944,18 @@ def show_office_tech_recovery_chart(office_metros_mapping, BLS_API_KEY):
 
     fig.update_traces(textposition="outside", cliponaxis=False)
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(
+        fig,
+        use_container_width=True,
+        config={
+            "toImageButtonOptions": {
+                "format": "svg",
+                "filename": "office_sector_recovery",
+                "scale": 10
+            }
+        }
+    )
+
     st.markdown("""
         <div style='font-size: 12px; color: #666; font-family: "Avenir", sans-serif;'>
         <strong>Source:</strong> Bureau of Labor Statistics (BLS).
@@ -3850,6 +3963,8 @@ def show_office_tech_recovery_chart(office_metros_mapping, BLS_API_KEY):
         <strong>Analysis:</strong> Bay Area Council Economic Institute.
         </div>
         """, unsafe_allow_html=True)
+    
+    st.markdown("---")
 
     # --- Summary table ---
     st.subheader("Summary")
@@ -4030,8 +4145,11 @@ def fetch_laus_employment_data():
         return None
 
 
-def create_jobs_ratio_chart():
+def show_jobs_ratio_chart():
     """
+    Dashboard Section: Employment
+    Dashboard Subtab: Jobs Ratio
+
     Creates a jobs ratio chart comparing BLS/LAUS employment ratios between 2019 and latest year.
     Now includes Bay Area Total as an additional region and Sonoma County 2015 data.
     """
@@ -4175,7 +4293,9 @@ def create_jobs_ratio_chart():
     # else:
     #     st.warning("No 2015 data available for Sonoma County")
     
-    # Now calculate Bay Area Total (2019 and latest year only)
+
+
+    # Calculate Bay Area Total (2019 and latest year only)
     # Sum BLS employment for all Bay Area regions
     bls_2019_total = bls_2019[bls_2019["Area Name"].isin(all_bay_area_regions)]["Employment"].sum()
     bls_latest_total = bls_latest[bls_latest["Area Name"].isin(all_bay_area_regions)]["Employment"].sum()
@@ -4336,9 +4456,9 @@ def create_jobs_ratio_chart():
             use_container_width=True,
             config={
                 "toImageButtonOptions": {
-                    "format": "png",   # or 'svg'
+                    "format": "svg",
                     "filename": "job_ratio",
-                    "scale": 5          # higher scale = higher DPI
+                    "scale": 10        
                 }
             }
         )
@@ -4351,6 +4471,8 @@ def create_jobs_ratio_chart():
     <strong style='font-family: "Avenir Medium", sans-serif;'>Analysis:</strong> Bay Area Council Economic Institute.<br>
     </div>
     """, unsafe_allow_html=True)
+
+    st.markdown("---")
     
     # Summary table
     st.subheader("Summary Table")
@@ -4425,8 +4547,6 @@ def show_metro_population_change_chart(
 
     Always uses percent change (no net-change toggle), styled like your Office/Tech chart.
     """
-
-    st.subheader("Population Change by Metro/Region")
 
     # --- Timeframe selector ---
     tf_choice = st.radio(
@@ -4581,7 +4701,7 @@ def show_metro_population_change_chart(
     fig.update_layout(
         title=dict(
             text=(
-                "Population Change by Metro/Region<br>"
+                "Population Trends Across Major Metro Areas<br>"
                 f"<span style='font-size:20px; color:#666; font-family:Avenir Medium'>{title_suffix}</span>"
             ),
             x=0.5, xanchor="center",
@@ -4613,7 +4733,7 @@ def show_metro_population_change_chart(
             config={
                 "toImageButtonOptions": {
                     "format": "svg",
-                    "filename": "metro_population",
+                    "filename": "metro_populations",
                     "scale": 10          # higher scale = higher DPI
                 }
             }
@@ -4625,6 +4745,8 @@ def show_metro_population_change_chart(
     <strong style='font-family: "Avenir Medium", sans-serif;'>Analysis:</strong> Bay Area Council Economic Institute.<br>
     </div>
     """, unsafe_allow_html=True)
+
+    st.markdown("---")
 
     # Summary table + download
     st.subheader("Summary")
@@ -4643,7 +4765,7 @@ def show_metro_population_change_chart(
                  use_container_width=True, hide_index=True)
 
     st.download_button(
-        "Download summary (CSV)",
+        "Download Data (CSV)",
         data=out.to_csv(index=False).encode("utf-8"),
         file_name=f"metro_population_change_{baseline_year}_to_{latest_year}.csv",
         mime="text/csv"
@@ -4651,9 +4773,12 @@ def show_metro_population_change_chart(
 
 def show_median_1br_rent_change_chart(
     csv_path: str = "docs/data_build/1br_Rents_Bay_Area.csv",
-    title: str = "Percent Change in Median 1-Bedroom Rent",
+    title: str = "Percent Change in Median 1-Bedroom Rents",
 ):
     """
+    Dashboard Section: Housing
+    Dashboard Subtab: Rent Trends
+
     Renders a vertical bar chart of percent change in median 1-BR rents by region.
     - Timeframes: Last Year, Since COVID-19
     - X-axis: regions (sorted high → low)
@@ -4661,7 +4786,6 @@ def show_median_1br_rent_change_chart(
     - Colors: California=#203864, others=#00aca2
     """
 
-    # ---- UI: timeframe toggle ----
     tf_choice = st.radio(
         "Select Time Frame:",
         ["Last Year", "Since COVID-19"],
@@ -4670,14 +4794,13 @@ def show_median_1br_rent_change_chart(
         key="rent_change_tf"
     )
 
-    # Target columns we want after normalization
     want_cols = {
         "region": "Region",
         "lastyear": "Last Year",
         "postcovid": "Post-Covid",
     }
 
-    # ---- Load CSV robustly (comma or tab; strip BOM) ----
+    # ---- Load CSV ----
     df = pd.DataFrame()
     source_used = None
     for p in [Path(csv_path), Path("/mnt/data/Median1BR_Rent_Change.csv")]:
@@ -4755,7 +4878,6 @@ def show_median_1br_rent_change_chart(
 
     subtitle = tf_choice
 
-    # ---- Figure ----
     fig = go.Figure()
     fig.add_trace(go.Bar(
         x=plot_df["region"],
@@ -4767,7 +4889,6 @@ def show_median_1br_rent_change_chart(
         hovertemplate="%{x}<br>Percent Change: %{y:.1f}%<extra></extra>",
     ))
 
-    # Horizontal dashed grid lines
     for y in yticks:
         fig.add_shape(
             type="line",
@@ -4780,16 +4901,13 @@ def show_median_1br_rent_change_chart(
         title=dict(
             text=(
                 f"{title}<br>"
-                f"<span style='font-size:20px; color:#666; font-family:Avenir Medium'>{subtitle}</span>"
             ),
             x=0.5, xanchor="center",
             font=dict(family="Avenir Black", size=26),
         ),
         margin=dict(l=60, r=40, t=80, b=120),
         xaxis=dict(
-            title="Region",
-            tickfont=dict(family="Avenir Black", size=16, color="black"),
-            title_font=dict(family="Avenir Medium", size=20, color="black"),
+            tickfont=dict(family="Avenir Medium", size=20, color="black"),
             tickangle=-30,
         ),
         yaxis=dict(
@@ -4799,7 +4917,7 @@ def show_median_1br_rent_change_chart(
             ticktext=ytick_labels,
             range=[y_min_r, y_max_r],
             ticksuffix="%",
-            title_font=dict(family="Avenir Medium", size=20, color="black"),
+            title_font=dict(family="Avenir Medium", size=22, color="black"),
             tickfont=dict(family="Avenir", size=16, color="black"),
             zeroline=True,
             zerolinewidth=1,
@@ -4817,7 +4935,7 @@ def show_median_1br_rent_change_chart(
                 "toImageButtonOptions": {
                     "format": "svg",
                     "filename": "median_rents",
-                    "scale": 10          # higher scale = higher DPI
+                    "scale": 10
                 }
             }
     )
@@ -4842,9 +4960,8 @@ def show_median_1br_rent_change_chart(
 
 def show_avg_housing_permits_chart(
     csv_path: str = "docs/data_build/Housing_Permits.csv",
-    title: str = "Average Housing Permits per 100,000 Residents by County",
+    title: str = "Average Housing Permits by County",
 ):
-    # --- UI: timeframe toggle ---
     tf_choice = st.radio(
         "Select Time Frame:",
         ["2018 to 2024", "2023 to 2024"],
@@ -4853,14 +4970,13 @@ def show_avg_housing_permits_chart(
         key="permits_tf"
     )
 
-    # Map the UI labels to CSV headers
     col_map = {
         "2018 to 2024": "2018-2024",
         "2023 to 2024": "2023-2024",
     }
     value_col = col_map[tf_choice]
 
-    # --- Load CSV robustly (comma or tab; handle BOM) ---
+    # --- Load CSV ---
     df = pd.DataFrame()
     source_used = None
     for p in [Path(csv_path), Path("/mnt/data/Housing_Permits.csv")]:
@@ -4899,7 +5015,7 @@ def show_avg_housing_permits_chart(
     # Colors: all bars teal #00aca2
     bar_colors = ["#00aca2"] * len(plot_df)
 
-    # --- Axis ticks (nice step & padding, not percent) ---
+    # --- Axis ticks ---
     def nice_step(span, target_ticks=6):
         if span <= 0:
             return 1
@@ -4914,7 +5030,7 @@ def show_avg_housing_permits_chart(
     vmin, vmax = float(plot_df["permits_per_100k"].min()), float(plot_df["permits_per_100k"].max())
     rng = vmax - vmin if vmax > vmin else 1.0
     pad = max(0.12 * rng, 5.0)
-    y_min, y_max = max(0.0, vmin - pad), vmax + pad  # floor at 0 for readability
+    y_min, y_max = max(0.0, vmin - pad), vmax + pad  
     step = nice_step(y_max - y_min, target_ticks=6)
     y_min_r = np.floor(y_min / step) * step
     y_max_r = np.ceil(y_max / step) * step
@@ -4961,9 +5077,7 @@ def show_avg_housing_permits_chart(
         ),
         margin=dict(l=60, r=40, t=80, b=120),
         xaxis=dict(
-            title="County",
-            tickfont=dict(family="Avenir Black", size=16, color="black"),
-            title_font=dict(family="Avenir Medium", size=20, color="black"),
+            tickfont=dict(family="Avenir Medium", size=20, color="black"),
             tickangle=-30,
         ),
         yaxis=dict(
@@ -5014,9 +5128,7 @@ def show_avg_housing_permits_chart(
 
 # --- Main Dashboard Block ---
 if section == "Employment":
-    # Process employment / unemployment data
-    # raw_data = fetch_unemployment_data()
-    # processed_df = process_unemployment_data(raw_data)
+
     df_unemp = load_prebuilt_or_fetch(
         "unemployment_ca",
         lambda: process_unemployment_data(fetch_unemployment_data())
@@ -5095,7 +5207,7 @@ if section == "Employment":
                     )
                     df_merged["color"] = df_merged["monthly_change"].apply(lambda x: "#00aca2" if x >= 0 else "#e63946")
 
-                    create_monthly_job_change_chart(df_merged, region_choice)
+                    show_monthly_job_change_chart(df_merged, region_choice)
                     create_job_change_summary_table(df_merged)
                 else:
                     st.warning(f"No data available for {region_choice}.")
@@ -5103,7 +5215,7 @@ if section == "Employment":
                 # Single region (e.g., "East Bay", "South Bay", "SF-Peninsula")
                 df = fetch_and_process_job_data(series_id_or_list, region_choice)
                 if df is not None:
-                    create_monthly_job_change_chart(df, region_choice)
+                    show_monthly_job_change_chart(df, region_choice)
                     create_job_change_summary_table(df)
 
     elif emp_subtab == "Industry":
@@ -5111,17 +5223,17 @@ if section == "Employment":
     elif emp_subtab == "Office Sector":
         show_office_tech_recovery_chart(office_metros_mapping, BLS_API_KEY)
     elif emp_subtab == "Jobs Ratio":
-        create_jobs_ratio_chart()
+        show_jobs_ratio_chart()
 
 elif section == "Population":
-    if pop_subtab == "Bay Area Counties":
+    if pop_subtab == "Counties":
         show_population_trend_chart()
-    elif pop_subtab == "Metropolitan Areas":
+    elif pop_subtab == "Metro Areas":
         show_metro_population_change_chart()
 
 
 elif section == "Housing":
-    if housing_subtab == "Median Rents":
+    if housing_subtab == "Rent Trends":
         show_median_1br_rent_change_chart()
     elif housing_subtab == "Housing Permits":
         show_avg_housing_permits_chart()
@@ -5137,4 +5249,4 @@ elif section == "Housing":
 
 
 st.markdown("---")
-st.caption("Created by Matthias Jiro Walther for the Bay Area Council Economic Institute")
+st.caption("© Bay Area Council Economic Institute")
