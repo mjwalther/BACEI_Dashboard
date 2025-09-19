@@ -3671,6 +3671,338 @@ def show_combined_industry_job_recovery_chart(bay_area_series_mapping, us_series
     st.dataframe(styled_summary, use_container_width=True, hide_index=True)
 
 
+def show_sonoma_combined_industry_job_recovery_chart(sonoma_mapping, us_series_mapping, BLS_API_KEY):
+    """
+    Dashboard Section: Employment
+    Dashboard Subtab: Industry
+
+    Horizontal bar chart of job recovery by industry with region + time frame + metric selectors.
+    Matches the time-frame behavior of show_office_tech_recovery_chart.
+    """
+
+    # --- Controls ---
+    region_choice = st.selectbox(
+        "Select Region:",
+        ["Bay Area", "United States"],
+        index=0,
+        key="industry_region_select"
+    )
+
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        tf_choice = st.radio(
+            label="Select Time Frame:",
+            options=["6 Months", "12 Months", "18 Months", "24 Months", "36 Months", "Since COVID-19"],
+            index=5,
+            horizontal=True,
+            key="industry_timeframe_select"
+        )
+    with col2:
+        metric_choice = st.radio(
+            "Metric:",
+            ["Percent Change", "Net Change"],
+            horizontal=True,
+            key="industry_metric_select"
+        )
+
+    # Pick mapping based on region
+    selected_mapping = sonoma_mapping if region_choice == "Sonoma County" else us_series_mapping
+    title_region = "Sonoma County" if region_choice == "Sonoma County" else "United States"
+
+    # --- BLS fetch ---
+    series_ids = list(selected_mapping.keys())
+    all_data = []
+    for i in range(0, len(series_ids), 25):
+        chunk = series_ids[i:i+25]
+        payload = {
+            "seriesid": chunk,
+            "startyear": "2020",
+            "endyear": str(datetime.now().year),
+            "registrationKey": BLS_API_KEY
+        }
+        try:
+            response = requests.post(
+                "https://api.bls.gov/publicAPI/v2/timeseries/data/",
+                json=payload, timeout=30
+            )
+            data = response.json()
+            if "Results" in data and "series" in data["Results"]:
+                all_data.extend(data["Results"]["series"])
+            else:
+                st.warning(f"No data returned for chunk {i//25 + 1}")
+        except Exception as e:
+            st.error(f"Error fetching chunk {i//25 + 1}: {e}")
+
+    if not all_data:
+        st.error("No data could be fetched from BLS API")
+        return
+
+    # --- Parse ---
+    records = []
+    for series in all_data:
+        sid = series["seriesID"]
+        if sid not in selected_mapping:
+            continue
+        region, industry = selected_mapping[sid]
+        for entry in series["data"]:
+            if entry.get("period") == "M13":
+                continue
+            try:
+                date = pd.to_datetime(entry["year"] + entry["periodName"], format="%Y%B", errors="coerce")
+                if pd.isna(date):
+                    continue
+                value = float(entry["value"].replace(",", "")) * 1000
+                records.append({
+                    "series_id": sid,
+                    "region": region,
+                    "industry": industry,
+                    "date": date,
+                    "value": value
+                })
+            except Exception:
+                continue
+
+    df = pd.DataFrame(records)
+    if df.empty:
+        st.error("No valid data records could be processed.")
+        return
+
+    # --- Time-frame baseline selection (mirrors office/tech chart) ---
+    data_last = pd.to_datetime(df["date"].max()).to_period("M").to_timestamp()
+    months_map = {"6 Months": 6, "12 Months": 12, "18 Months": 18, "24 Months": 24, "36 Months": 36}
+    if tf_choice == "Since COVID-19":
+        baseline_target = pd.to_datetime("2020-02-01")
+    else:
+        n_months = months_map[tf_choice]
+        # Inclusive window: if last is Aug, 12 months spans Sep last year .. Aug this year
+        baseline_target = (data_last - pd.DateOffset(months=n_months - 1)).to_period("M").to_timestamp()
+
+    available_dates = df["date"].unique()
+    baseline_date = min(available_dates, key=lambda x: abs(x - baseline_target))
+    latest_date   = data_last
+
+    baseline_label = pd.to_datetime(baseline_date).strftime("%B %Y")
+    title_period   = tf_choice if tf_choice != "Since COVID-19" else "Post-Covid"
+    subtitle_text  = f"{baseline_label} to {latest_date.strftime('%B %Y')}"
+
+    # --- Slice baseline/latest ---
+    baseline_df = df[df["date"] == baseline_date]
+    latest_df   = df[df["date"] == latest_date]
+
+    if baseline_df.empty:
+        st.error(f"No data available for baseline period ({baseline_label})")
+        return
+    if latest_df.empty:
+        st.error(f"No data available for latest period ({latest_date.strftime('%b %Y')})")
+        return
+
+    # --- Aggregate by industry ---
+    baseline_totals = baseline_df.groupby("industry")["value"].sum()
+    latest_totals   = latest_df.groupby("industry")["value"].sum()
+
+    # Derived category: Wholesale, Transportation, and Utilities = TTU - Retail
+    if "Trade, Transportation, and Utilities" in baseline_totals and "Retail Trade" in baseline_totals:
+        baseline_totals["Wholesale, Transportation, and Utilities"] = (
+            baseline_totals["Trade, Transportation, and Utilities"] - baseline_totals["Retail Trade"]
+        )
+    if "Trade, Transportation, and Utilities" in latest_totals and "Retail Trade" in latest_totals:
+        latest_totals["Wholesale, Transportation, and Utilities"] = (
+            latest_totals["Trade, Transportation, and Utilities"] - latest_totals["Retail Trade"]
+        )
+
+    # Keep only industries present in both periods
+    industries_with_both = set(baseline_totals.index) & set(latest_totals.index)
+
+    # Percent change
+    pct_change = pd.Series(dtype=float)
+    for industry in industries_with_both:
+        base = baseline_totals[industry]
+        if base > 0:
+            pct_change[industry] = (latest_totals[industry] - base) / base * 100
+
+    # Net change
+    net_change = pd.Series(dtype=float)
+    for industry in industries_with_both:
+        net_change[industry] = latest_totals[industry] - baseline_totals[industry]
+
+    # Drop aggregate TTU
+    pct_change = pct_change.sort_values().drop("Trade, Transportation, and Utilities", errors="ignore")
+    net_change = net_change.sort_values().drop("Trade, Transportation, and Utilities", errors="ignore")
+
+    if pct_change.empty and metric_choice == "Percent Change":
+        st.error("No industries have sufficient data for percent change comparison")
+        return
+    if net_change.empty and metric_choice == "Net Change":
+        st.error("No industries have sufficient data for net change comparison")
+        return
+
+    def nice_step(data_range, target_ticks=8):
+        if data_range <= 0:
+            return 1
+        ideal = data_range / max(1, target_ticks)
+        power = 10 ** np.floor(np.log10(ideal))
+        for m in (1, 2, 2.5, 5, 10):
+            step = m * power
+            if step >= ideal:
+                return step
+        return 10 * power
+
+    # --- Choose metric for plotting ---
+    if metric_choice == "Net Change":
+        selected = net_change
+        xaxis_title = f"Net Change in Jobs Since {baseline_label}"
+        label_formatter = lambda v: f"{v:+,.0f}"
+        tick_value_formatter = lambda x: f"{x:,}"
+        is_percent_axis = False
+        hover_value_fmt = ":,.0f"
+    else:
+        selected = pct_change
+        xaxis_title = f"Percent Change in Jobs Since {baseline_label}"
+        label_formatter = lambda v: f"{v:+.1f}%"
+        tick_value_formatter = lambda x: f"{x:.0f}%"
+        is_percent_axis = True
+        hover_value_fmt = ":.1f"
+
+    vmin = float(selected.min())
+    vmax = float(selected.max())
+    rng  = vmax - vmin
+    if rng <= 0:
+        rng = 1.0 if is_percent_axis else 1000.0
+    max_abs = max(abs(vmin), abs(vmax))
+
+    # Base padding
+    pad_pct = 0.18 if not is_percent_axis else 0.12
+    if title_region == "Sonoma County" and not is_percent_axis:
+        pad_pct = 0.12
+
+    if is_percent_axis:
+        min_pad = 2  # percentage points
+    else:
+        # Scale-aware floor: ~4% of magnitude with a small floor and a sane cap
+        min_pad = max(0.04 * max_abs, 1500)
+        min_pad = min(min_pad, 75000)
+
+    left_pad  = max(pad_pct * rng, min_pad)
+    right_pad = max(pad_pct * rng, min_pad)
+
+    x_min = vmin - left_pad
+    x_max = vmax + right_pad
+
+    # Nice tick step & rounded bounds
+    step = nice_step(x_max - x_min, target_ticks=6 if is_percent_axis else 7)
+    x_min_rounded = np.floor(x_min / step) * step
+    x_max_rounded = np.ceil(x_max / step) * step
+
+    tick_positions = np.arange(x_min_rounded, x_max_rounded + 0.5 * step, step)
+    tick_labels = (
+        [f"{int(round(x)):,}" for x in tick_positions]
+        if not is_percent_axis else
+        [f"{x:.0f}%" for x in tick_positions]
+    )
+
+    # Colors by sign of the plotted metric
+    colors = ["#d1493f" if val < 0 else "#00aca2" for val in selected.values]
+
+    # --- Chart ---
+    fig = go.Figure()
+    order = selected.index  # preserve sorted order
+
+    fig.add_trace(go.Bar(
+        y=order,
+        x=selected.loc[order].values,
+        orientation='h',
+        marker_color=colors,
+        text=[label_formatter(v) for v in selected.loc[order].values],
+        textfont=dict(size=16, family="Avenir Light", color="black"),
+        textposition="outside",
+        hovertemplate=(
+            f"%{{y}}<br>{metric_choice}: %{{x{hover_value_fmt}}}"
+            f"<br>{baseline_label}: %{{customdata[0]:,.0f}}"
+            f"<br>{latest_date.strftime('%B %Y')}: %{{customdata[1]:,.0f}}<extra></extra>"
+        ),
+        customdata=[[baseline_totals[ind], latest_totals[ind]] for ind in order]
+    ))
+
+    # Vertical dashed grid lines at tick marks
+    for tx in tick_positions:
+        fig.add_shape(
+            type="line",
+            x0=tx, y0=-0.5, x1=tx, y1=len(selected) - 0.5,
+            line=dict(color="lightgray", width=1, dash="dash"),
+            layer="below"
+        )
+
+    fig.update_layout(
+        xaxis_title=xaxis_title,
+        title=dict(
+            text=(
+                f"{title_region} Job Recovery by Industry<br>"
+                f"<span style='font-size:20px; color:#666; font-family:Avenir Medium'>{subtitle_text}</span>"
+            ),
+            x=0.5,
+            xanchor='center',
+            font=dict(family="Avenir Black", size=26)
+        ),
+        margin=dict(l=100, r=200, t=80, b=70),
+        xaxis=dict(
+            tickmode="array",
+            tickvals=tick_positions,
+            ticktext=tick_labels,
+            range=[x_min_rounded, x_max_rounded],
+            title_font=dict(family="Avenir Medium", size=22, color="black"),
+            tickfont=dict(family="Avenir", size=16, color="black"),
+        ),
+        yaxis=dict(
+            tickfont=dict(family="Avenir", size=20, color="black"),
+        ),
+        showlegend=False,
+        height=600
+    )
+
+    fig.update_traces(textposition="outside", cliponaxis=False)
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True,
+        config={
+            "toImageButtonOptions": {
+                "format": "svg",
+                "filename": "industry_recovery",
+                "scale": 10
+            }
+        }
+    )
+
+    st.markdown(f"""
+    <div style='font-size: 12px; color: #666; font-family: "Avenir", sans-serif;'>
+    <strong>Source:</strong> Bureau of Labor Statistics (BLS).<br>
+    <strong>Note:</strong> "Education" refers to private education, while public education is included under Government. Total Non-Farm Employment data are seasonally adjusted; other industry data are not.<br>
+    <strong>Analysis:</strong> Bay Area Council Economic Institute.<br>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # --- Summary table ---
+    st.subheader("Summary")
+    summary_df = pd.DataFrame({
+        'Industry': order,
+        f'{baseline_label} Jobs': [f"{baseline_totals[ind]:,.0f}" for ind in order],
+        f'{latest_date.strftime("%B %Y")} Jobs': [f"{latest_totals[ind]:,.0f}" for ind in order],
+        'Net Change': [f"{(latest_totals[ind] - baseline_totals[ind]):+,.0f}" for ind in order],
+        'Percent Change': [f"{(pct_change.get(ind, np.nan)):+.1f}%" for ind in order],
+    })
+
+    def color_percent(val):
+        if isinstance(val, str) and '-' in val:
+            return 'color: red'
+        else:
+            return 'color: green'
+
+    styled_summary = summary_df.style.map(color_percent, subset=['Percent Change'])
+    st.dataframe(styled_summary, use_container_width=True, hide_index=True)
+
+
 
 def show_office_tech_recovery_chart(office_metros_mapping, BLS_API_KEY):
     """
@@ -5207,6 +5539,9 @@ if section == "Employment":
 
     elif emp_subtab == "Jobs by Industry":
         show_combined_industry_job_recovery_chart(series_mapping_v2, us_series_mapping, BLS_API_KEY)
+
+        # # --- Sonoma County ---
+        # show_sonoma_combined_industry_job_recovery_chart(sonoma_mapping, us_series_mapping, BLS_API_KEY)
     elif emp_subtab == "Office Jobs":
         show_office_tech_recovery_chart(office_metros_mapping, BLS_API_KEY)
     elif emp_subtab == "Employed Residents":
