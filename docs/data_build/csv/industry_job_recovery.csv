@@ -1,142 +1,142 @@
 region,industry,metric_window,baseline_date,latest_date,baseline_jobs,latest_jobs,net_change,pct_change
-"Napa, CA",Education and Health Services,past_12_months,2024-12-01,2025-12-01,11400.0,11800.0,400.0,3.508771929824561
-"Napa, CA",Education and Health Services,since_feb_2020,2020-02-01,2025-12-01,10600.0,11800.0,1200.0,11.320754716981133
-"Napa, CA",Financial Activities,past_12_months,2024-12-01,2025-12-01,2100.0,2100.0,0.0,0.0
-"Napa, CA",Financial Activities,since_feb_2020,2020-02-01,2025-12-01,2300.0,2100.0,-200.0,-8.695652173913043
-"Napa, CA",Government,past_12_months,2024-12-01,2025-12-01,9800.0,10200.0,400.0,4.081632653061225
-"Napa, CA",Government,since_feb_2020,2020-02-01,2025-12-01,10400.0,10200.0,-200.0,-1.9230769230769231
-"Napa, CA",Information,past_12_months,2024-12-01,2025-12-01,300.0,300.0,0.0,0.0
-"Napa, CA",Information,since_feb_2020,2020-02-01,2025-12-01,300.0,300.0,0.0,0.0
-"Napa, CA",Leisure and Hospitality,past_12_months,2024-12-01,2025-12-01,13600.0,14100.0,500.0,3.6764705882352944
-"Napa, CA",Leisure and Hospitality,since_feb_2020,2020-02-01,2025-12-01,13100.0,14100.0,1000.0,7.633587786259542
-"Napa, CA",Manufacturing,past_12_months,2024-12-01,2025-12-01,16500.0,15900.0,-600.0,-3.6363636363636362
-"Napa, CA",Manufacturing,since_feb_2020,2020-02-01,2025-12-01,13300.0,15900.0,2600.0,19.548872180451127
-"Napa, CA",Professional and Business Services,past_12_months,2024-12-01,2025-12-01,7300.0,7200.0,-100.0,-1.36986301369863
-"Napa, CA",Professional and Business Services,since_feb_2020,2020-02-01,2025-12-01,7100.0,7200.0,100.0,1.4084507042253522
-"Napa, CA",Retail Trade,past_12_months,2024-12-01,2025-12-01,6500.0,6400.0,-100.0,-1.5384615384615385
-"Napa, CA",Retail Trade,since_feb_2020,2020-02-01,2025-12-01,6400.0,6400.0,0.0,0.0
-"Napa, CA","Wholesale, Transportation, and Utilities",past_12_months,2024-12-01,2025-12-01,3800.0,3700.0,-100.0,-2.631578947368421
-"Napa, CA","Wholesale, Transportation, and Utilities",since_feb_2020,2020-02-01,2025-12-01,3800.0,3700.0,-100.0,-2.631578947368421
-"Oakland-Fremont-Berkeley, CA",Construction,past_12_months,2024-12-01,2025-12-01,71200.0,70200.0,-1000.0,-1.4044943820224718
-"Oakland-Fremont-Berkeley, CA",Construction,since_feb_2020,2020-02-01,2025-12-01,75700.0,70200.0,-5500.0,-7.26552179656539
-"Oakland-Fremont-Berkeley, CA",Education and Health Services,past_12_months,2024-12-01,2025-12-01,234600.0,245600.0,11000.0,4.6888320545609545
-"Oakland-Fremont-Berkeley, CA",Education and Health Services,since_feb_2020,2020-02-01,2025-12-01,202600.0,245600.0,43000.0,21.224086870681145
-"Oakland-Fremont-Berkeley, CA",Financial Activities,past_12_months,2024-12-01,2025-12-01,50100.0,49300.0,-800.0,-1.5968063872255487
-"Oakland-Fremont-Berkeley, CA",Financial Activities,since_feb_2020,2020-02-01,2025-12-01,55100.0,49300.0,-5800.0,-10.526315789473683
-"Oakland-Fremont-Berkeley, CA",Government,past_12_months,2024-12-01,2025-12-01,168200.0,169300.0,1100.0,0.6539833531510106
-"Oakland-Fremont-Berkeley, CA",Government,since_feb_2020,2020-02-01,2025-12-01,176300.0,169300.0,-7000.0,-3.970504821327283
-"Oakland-Fremont-Berkeley, CA",Information,past_12_months,2024-12-01,2025-12-01,22100.0,19900.0,-2200.0,-9.95475113122172
-"Oakland-Fremont-Berkeley, CA",Information,since_feb_2020,2020-02-01,2025-12-01,27500.0,19900.0,-7600.0,-27.636363636363637
-"Oakland-Fremont-Berkeley, CA",Leisure and Hospitality,past_12_months,2024-12-01,2025-12-01,108900.0,107000.0,-1900.0,-1.7447199265381086
-"Oakland-Fremont-Berkeley, CA",Leisure and Hospitality,since_feb_2020,2020-02-01,2025-12-01,119500.0,107000.0,-12500.0,-10.460251046025103
-"Oakland-Fremont-Berkeley, CA",Manufacturing,past_12_months,2024-12-01,2025-12-01,100800.0,94500.0,-6300.0,-6.25
-"Oakland-Fremont-Berkeley, CA",Manufacturing,since_feb_2020,2020-02-01,2025-12-01,101500.0,94500.0,-7000.0,-6.896551724137931
-"Oakland-Fremont-Berkeley, CA",Professional and Business Services,past_12_months,2024-12-01,2025-12-01,186200.0,179200.0,-7000.0,-3.7593984962406015
-"Oakland-Fremont-Berkeley, CA",Professional and Business Services,since_feb_2020,2020-02-01,2025-12-01,195500.0,179200.0,-16300.0,-8.337595907928389
-"Oakland-Fremont-Berkeley, CA",Retail Trade,past_12_months,2024-12-01,2025-12-01,106900.0,106300.0,-600.0,-0.5612722170252572
-"Oakland-Fremont-Berkeley, CA",Retail Trade,since_feb_2020,2020-02-01,2025-12-01,110100.0,106300.0,-3800.0,-3.451407811080836
-"Oakland-Fremont-Berkeley, CA","Wholesale, Transportation, and Utilities",past_12_months,2024-12-01,2025-12-01,97400.0,96900.0,-500.0,-0.5133470225872689
-"Oakland-Fremont-Berkeley, CA","Wholesale, Transportation, and Utilities",since_feb_2020,2020-02-01,2025-12-01,89000.0,96900.0,7900.0,8.876404494382022
-"San Francisco-San Mateo-Redwood City, CA",Construction,past_12_months,2024-12-01,2025-12-01,38700.0,40000.0,1300.0,3.359173126614987
-"San Francisco-San Mateo-Redwood City, CA",Construction,since_feb_2020,2020-02-01,2025-12-01,46400.0,40000.0,-6400.0,-13.793103448275861
-"San Francisco-San Mateo-Redwood City, CA",Education and Health Services,past_12_months,2024-12-01,2025-12-01,165600.0,167300.0,1700.0,1.0265700483091789
-"San Francisco-San Mateo-Redwood City, CA",Education and Health Services,since_feb_2020,2020-02-01,2025-12-01,151200.0,167300.0,16100.0,10.648148148148149
-"San Francisco-San Mateo-Redwood City, CA",Financial Activities,past_12_months,2024-12-01,2025-12-01,78000.0,75700.0,-2300.0,-2.9487179487179485
-"San Francisco-San Mateo-Redwood City, CA",Financial Activities,since_feb_2020,2020-02-01,2025-12-01,84100.0,75700.0,-8400.0,-9.988109393579073
-"San Francisco-San Mateo-Redwood City, CA",Government,past_12_months,2024-12-01,2025-12-01,142900.0,141500.0,-1400.0,-0.979706088173548
-"San Francisco-San Mateo-Redwood City, CA",Government,since_feb_2020,2020-02-01,2025-12-01,132100.0,141500.0,9400.0,7.115821347464042
-"San Francisco-San Mateo-Redwood City, CA",Information,past_12_months,2024-12-01,2025-12-01,111800.0,107300.0,-4500.0,-4.025044722719142
-"San Francisco-San Mateo-Redwood City, CA",Information,since_feb_2020,2020-02-01,2025-12-01,104800.0,107300.0,2500.0,2.385496183206107
-"San Francisco-San Mateo-Redwood City, CA",Leisure and Hospitality,past_12_months,2024-12-01,2025-12-01,122900.0,127400.0,4500.0,3.6615134255492268
-"San Francisco-San Mateo-Redwood City, CA",Leisure and Hospitality,since_feb_2020,2020-02-01,2025-12-01,143800.0,127400.0,-16400.0,-11.404728789986091
-"San Francisco-San Mateo-Redwood City, CA",Manufacturing,past_12_months,2024-12-01,2025-12-01,29600.0,29800.0,200.0,0.6756756756756757
-"San Francisco-San Mateo-Redwood City, CA",Manufacturing,since_feb_2020,2020-02-01,2025-12-01,39800.0,29800.0,-10000.0,-25.125628140703515
-"San Francisco-San Mateo-Redwood City, CA",Professional and Business Services,past_12_months,2024-12-01,2025-12-01,290600.0,287000.0,-3600.0,-1.2388162422573985
-"San Francisco-San Mateo-Redwood City, CA",Professional and Business Services,since_feb_2020,2020-02-01,2025-12-01,300400.0,287000.0,-13400.0,-4.4607190412782955
-"San Francisco-San Mateo-Redwood City, CA",Retail Trade,past_12_months,2024-12-01,2025-12-01,63800.0,63900.0,100.0,0.1567398119122257
-"San Francisco-San Mateo-Redwood City, CA",Retail Trade,since_feb_2020,2020-02-01,2025-12-01,77500.0,63900.0,-13600.0,-17.548387096774192
-"San Francisco-San Mateo-Redwood City, CA","Wholesale, Transportation, and Utilities",past_12_months,2024-12-01,2025-12-01,73600.0,72400.0,-1200.0,-1.6304347826086956
-"San Francisco-San Mateo-Redwood City, CA","Wholesale, Transportation, and Utilities",since_feb_2020,2020-02-01,2025-12-01,76500.0,72400.0,-4100.0,-5.359477124183006
-"San Jose-Sunnyvale-Santa Clara, CA",Construction,past_12_months,2024-12-01,2025-12-01,52700.0,53700.0,1000.0,1.8975332068311195
-"San Jose-Sunnyvale-Santa Clara, CA",Construction,since_feb_2020,2020-02-01,2025-12-01,53200.0,53700.0,500.0,0.9398496240601504
-"San Jose-Sunnyvale-Santa Clara, CA",Education and Health Services,past_12_months,2024-12-01,2025-12-01,213600.0,220700.0,7100.0,3.3239700374531833
-"San Jose-Sunnyvale-Santa Clara, CA",Education and Health Services,since_feb_2020,2020-02-01,2025-12-01,185100.0,220700.0,35600.0,19.23284710967045
-"San Jose-Sunnyvale-Santa Clara, CA",Financial Activities,past_12_months,2024-12-01,2025-12-01,36400.0,35600.0,-800.0,-2.197802197802198
-"San Jose-Sunnyvale-Santa Clara, CA",Financial Activities,since_feb_2020,2020-02-01,2025-12-01,39400.0,35600.0,-3800.0,-9.644670050761421
-"San Jose-Sunnyvale-Santa Clara, CA",Government,past_12_months,2024-12-01,2025-12-01,102400.0,103400.0,1000.0,0.9765625
-"San Jose-Sunnyvale-Santa Clara, CA",Government,since_feb_2020,2020-02-01,2025-12-01,99800.0,103400.0,3600.0,3.6072144288577155
-"San Jose-Sunnyvale-Santa Clara, CA",Information,past_12_months,2024-12-01,2025-12-01,94100.0,94400.0,300.0,0.3188097768331562
-"San Jose-Sunnyvale-Santa Clara, CA",Information,since_feb_2020,2020-02-01,2025-12-01,105500.0,94400.0,-11100.0,-10.52132701421801
-"San Jose-Sunnyvale-Santa Clara, CA",Leisure and Hospitality,past_12_months,2024-12-01,2025-12-01,104100.0,106000.0,1900.0,1.8251681075888568
-"San Jose-Sunnyvale-Santa Clara, CA",Leisure and Hospitality,since_feb_2020,2020-02-01,2025-12-01,105300.0,106000.0,700.0,0.6647673314339981
-"San Jose-Sunnyvale-Santa Clara, CA",Manufacturing,past_12_months,2024-12-01,2025-12-01,123700.0,120200.0,-3500.0,-2.8294260307194827
-"San Jose-Sunnyvale-Santa Clara, CA",Manufacturing,since_feb_2020,2020-02-01,2025-12-01,129199.99999999999,120200.0,-8999.999999999985,-6.965944272445809
-"San Jose-Sunnyvale-Santa Clara, CA",Professional and Business Services,past_12_months,2024-12-01,2025-12-01,285900.0,277300.0,-8600.0,-3.0080447708989153
-"San Jose-Sunnyvale-Santa Clara, CA",Professional and Business Services,since_feb_2020,2020-02-01,2025-12-01,284300.0,277300.0,-7000.0,-2.4621878297572986
-"San Jose-Sunnyvale-Santa Clara, CA",Retail Trade,past_12_months,2024-12-01,2025-12-01,75300.0,75800.0,500.0,0.6640106241699867
-"San Jose-Sunnyvale-Santa Clara, CA",Retail Trade,since_feb_2020,2020-02-01,2025-12-01,80600.0,75800.0,-4800.0,-5.955334987593052
-"San Jose-Sunnyvale-Santa Clara, CA","Wholesale, Transportation, and Utilities",past_12_months,2024-12-01,2025-12-01,46000.0,45000.0,-1000.0,-2.1739130434782608
-"San Jose-Sunnyvale-Santa Clara, CA","Wholesale, Transportation, and Utilities",since_feb_2020,2020-02-01,2025-12-01,46100.0,45000.0,-1100.0,-2.386117136659436
-"San Rafael, CA",Construction,past_12_months,2024-12-01,2025-12-01,7400.0,7000.0,-400.0,-5.405405405405405
-"San Rafael, CA",Construction,since_feb_2020,2020-02-01,2025-12-01,7600.0,7000.0,-600.0,-7.894736842105263
-"San Rafael, CA",Education and Health Services,past_12_months,2024-12-01,2025-12-01,22400.0,23500.0,1100.0,4.910714285714286
-"San Rafael, CA",Education and Health Services,since_feb_2020,2020-02-01,2025-12-01,20900.0,23500.0,2600.0,12.440191387559809
-"San Rafael, CA",Financial Activities,past_12_months,2024-12-01,2025-12-01,5000.0,4300.0,-700.0,-14.000000000000002
-"San Rafael, CA",Financial Activities,since_feb_2020,2020-02-01,2025-12-01,5500.0,4300.0,-1200.0,-21.818181818181817
-"San Rafael, CA",Government,past_12_months,2024-12-01,2025-12-01,16000.0,16300.0,300.0,1.875
-"San Rafael, CA",Government,since_feb_2020,2020-02-01,2025-12-01,15500.0,16300.0,800.0,5.161290322580645
-"San Rafael, CA",Information,past_12_months,2024-12-01,2025-12-01,2900.0,2700.0,-200.0,-6.896551724137931
-"San Rafael, CA",Information,since_feb_2020,2020-02-01,2025-12-01,2700.0,2700.0,0.0,0.0
-"San Rafael, CA",Leisure and Hospitality,past_12_months,2024-12-01,2025-12-01,14500.0,14600.0,100.0,0.6896551724137931
-"San Rafael, CA",Leisure and Hospitality,since_feb_2020,2020-02-01,2025-12-01,15400.0,14600.0,-800.0,-5.194805194805195
-"San Rafael, CA",Manufacturing,past_12_months,2024-12-01,2025-12-01,4000.0,4000.0,0.0,0.0
-"San Rafael, CA",Manufacturing,since_feb_2020,2020-02-01,2025-12-01,4900.0,4000.0,-900.0,-18.367346938775512
-"San Rafael, CA",Professional and Business Services,past_12_months,2024-12-01,2025-12-01,17400.0,16800.0,-600.0,-3.4482758620689653
-"San Rafael, CA",Professional and Business Services,since_feb_2020,2020-02-01,2025-12-01,18800.0,16800.0,-2000.0,-10.638297872340425
-"San Rafael, CA",Retail Trade,past_12_months,2024-12-01,2025-12-01,13500.0,13400.0,-100.0,-0.7407407407407408
-"San Rafael, CA",Retail Trade,since_feb_2020,2020-02-01,2025-12-01,14900.0,13400.0,-1500.0,-10.06711409395973
-"San Rafael, CA","Wholesale, Transportation, and Utilities",past_12_months,2024-12-01,2025-12-01,3900.0,3600.0,-300.0,-7.6923076923076925
-"San Rafael, CA","Wholesale, Transportation, and Utilities",since_feb_2020,2020-02-01,2025-12-01,3700.0,3600.0,-100.0,-2.7027027027027026
-"Santa Rosa-Petaluma, CA",Construction,past_12_months,2024-12-01,2025-12-01,16200.0,15500.0,-700.0,-4.320987654320987
-"Santa Rosa-Petaluma, CA",Construction,since_feb_2020,2020-02-01,2025-12-01,16700.0,15500.0,-1200.0,-7.18562874251497
-"Santa Rosa-Petaluma, CA",Education and Health Services,past_12_months,2024-12-01,2025-12-01,38300.0,40400.0,2100.0,5.483028720626632
-"Santa Rosa-Petaluma, CA",Education and Health Services,since_feb_2020,2020-02-01,2025-12-01,36500.0,40400.0,3900.0,10.684931506849315
-"Santa Rosa-Petaluma, CA",Financial Activities,past_12_months,2024-12-01,2025-12-01,6800.0,6900.0,100.0,1.4705882352941175
-"Santa Rosa-Petaluma, CA",Financial Activities,since_feb_2020,2020-02-01,2025-12-01,8400.0,6900.0,-1500.0,-17.857142857142858
-"Santa Rosa-Petaluma, CA",Government,past_12_months,2024-12-01,2025-12-01,28500.0,28000.0,-500.0,-1.7543859649122806
-"Santa Rosa-Petaluma, CA",Government,since_feb_2020,2020-02-01,2025-12-01,29400.0,28000.0,-1400.0,-4.761904761904762
-"Santa Rosa-Petaluma, CA",Information,past_12_months,2024-12-01,2025-12-01,2600.0,2400.0,-200.0,-7.6923076923076925
-"Santa Rosa-Petaluma, CA",Information,since_feb_2020,2020-02-01,2025-12-01,2600.0,2400.0,-200.0,-7.6923076923076925
-"Santa Rosa-Petaluma, CA",Leisure and Hospitality,past_12_months,2024-12-01,2025-12-01,25400.0,25500.0,100.0,0.39370078740157477
-"Santa Rosa-Petaluma, CA",Leisure and Hospitality,since_feb_2020,2020-02-01,2025-12-01,25100.0,25500.0,400.0,1.593625498007968
-"Santa Rosa-Petaluma, CA",Manufacturing,past_12_months,2024-12-01,2025-12-01,21600.0,21100.0,-500.0,-2.314814814814815
-"Santa Rosa-Petaluma, CA",Manufacturing,since_feb_2020,2020-02-01,2025-12-01,23200.0,21100.0,-2100.0,-9.051724137931034
-"Santa Rosa-Petaluma, CA",Professional and Business Services,past_12_months,2024-12-01,2025-12-01,23700.0,23900.0,200.0,0.8438818565400843
-"Santa Rosa-Petaluma, CA",Professional and Business Services,since_feb_2020,2020-02-01,2025-12-01,23900.0,23900.0,0.0,0.0
-"Santa Rosa-Petaluma, CA",Retail Trade,past_12_months,2024-12-01,2025-12-01,23100.0,23500.0,400.0,1.7316017316017316
-"Santa Rosa-Petaluma, CA",Retail Trade,since_feb_2020,2020-02-01,2025-12-01,24000.0,23500.0,-500.0,-2.083333333333333
-"Santa Rosa-Petaluma, CA","Wholesale, Transportation, and Utilities",past_12_months,2024-12-01,2025-12-01,11300.0,11000.0,-300.0,-2.6548672566371683
-"Santa Rosa-Petaluma, CA","Wholesale, Transportation, and Utilities",since_feb_2020,2020-02-01,2025-12-01,11900.0,11000.0,-900.0,-7.563025210084033
-"Vallejo, CA",Construction,past_12_months,2024-12-01,2025-12-01,11000.0,10200.0,-800.0,-7.2727272727272725
-"Vallejo, CA",Construction,since_feb_2020,2020-02-01,2025-12-01,11900.0,10200.0,-1700.0,-14.285714285714285
-"Vallejo, CA",Education and Health Services,past_12_months,2024-12-01,2025-12-01,31800.0,32500.0,700.0,2.20125786163522
-"Vallejo, CA",Education and Health Services,since_feb_2020,2020-02-01,2025-12-01,29500.0,32500.0,3000.0,10.16949152542373
-"Vallejo, CA",Financial Activities,past_12_months,2024-12-01,2025-12-01,4800.0,4800.0,0.0,0.0
-"Vallejo, CA",Financial Activities,since_feb_2020,2020-02-01,2025-12-01,5100.0,4800.0,-300.0,-5.88235294117647
-"Vallejo, CA",Government,past_12_months,2024-12-01,2025-12-01,24500.0,24300.0,-200.0,-0.8163265306122449
-"Vallejo, CA",Government,since_feb_2020,2020-02-01,2025-12-01,25000.0,24300.0,-700.0,-2.8000000000000003
-"Vallejo, CA",Information,past_12_months,2024-12-01,2025-12-01,900.0,900.0,0.0,0.0
-"Vallejo, CA",Information,since_feb_2020,2020-02-01,2025-12-01,1000.0,900.0,-100.0,-10.0
-"Vallejo, CA",Leisure and Hospitality,past_12_months,2024-12-01,2025-12-01,15200.0,15400.0,200.0,1.3157894736842104
-"Vallejo, CA",Leisure and Hospitality,since_feb_2020,2020-02-01,2025-12-01,15800.0,15400.0,-400.0,-2.5316455696202533
-"Vallejo, CA",Manufacturing,past_12_months,2024-12-01,2025-12-01,11200.0,10800.0,-400.0,-3.571428571428571
-"Vallejo, CA",Manufacturing,since_feb_2020,2020-02-01,2025-12-01,11300.0,10800.0,-500.0,-4.424778761061947
-"Vallejo, CA",Professional and Business Services,past_12_months,2024-12-01,2025-12-01,11100.0,10400.0,-700.0,-6.306306306306306
-"Vallejo, CA",Professional and Business Services,since_feb_2020,2020-02-01,2025-12-01,10500.0,10400.0,-100.0,-0.9523809523809524
-"Vallejo, CA",Retail Trade,past_12_months,2024-12-01,2025-12-01,18100.0,17800.0,-300.0,-1.6574585635359116
-"Vallejo, CA",Retail Trade,since_feb_2020,2020-02-01,2025-12-01,17400.0,17800.0,400.0,2.2988505747126435
-"Vallejo, CA","Wholesale, Transportation, and Utilities",past_12_months,2024-12-01,2025-12-01,11400.0,11000.0,-400.0,-3.508771929824561
-"Vallejo, CA","Wholesale, Transportation, and Utilities",since_feb_2020,2020-02-01,2025-12-01,9100.0,11000.0,1900.0,20.87912087912088
+"Napa, CA",Education and Health Services,past_12_months,2025-01-01,2026-01-01,10900.0,11600.0,700.0,6.422018348623854
+"Napa, CA",Education and Health Services,since_feb_2020,2020-02-01,2026-01-01,10600.0,11600.0,1000.0,9.433962264150944
+"Napa, CA",Financial Activities,past_12_months,2025-01-01,2026-01-01,1900.0,2000.0,100.0,5.263157894736842
+"Napa, CA",Financial Activities,since_feb_2020,2020-02-01,2026-01-01,2300.0,2000.0,-300.0,-13.043478260869565
+"Napa, CA",Government,past_12_months,2025-01-01,2026-01-01,9700.0,10000.0,300.0,3.0927835051546393
+"Napa, CA",Government,since_feb_2020,2020-02-01,2026-01-01,10400.0,10000.0,-400.0,-3.8461538461538463
+"Napa, CA",Information,past_12_months,2025-01-01,2026-01-01,300.0,300.0,0.0,0.0
+"Napa, CA",Information,since_feb_2020,2020-02-01,2026-01-01,300.0,300.0,0.0,0.0
+"Napa, CA",Leisure and Hospitality,past_12_months,2025-01-01,2026-01-01,12600.0,13000.0,400.0,3.1746031746031744
+"Napa, CA",Leisure and Hospitality,since_feb_2020,2020-02-01,2026-01-01,13100.0,13000.0,-100.0,-0.7633587786259541
+"Napa, CA",Manufacturing,past_12_months,2025-01-01,2026-01-01,13900.0,14200.0,300.0,2.158273381294964
+"Napa, CA",Manufacturing,since_feb_2020,2020-02-01,2026-01-01,13300.0,14200.0,900.0,6.7669172932330826
+"Napa, CA",Professional and Business Services,past_12_months,2025-01-01,2026-01-01,6700.0,6700.0,0.0,0.0
+"Napa, CA",Professional and Business Services,since_feb_2020,2020-02-01,2026-01-01,7100.0,6700.0,-400.0,-5.633802816901409
+"Napa, CA",Retail Trade,past_12_months,2025-01-01,2026-01-01,6400.0,6400.0,0.0,0.0
+"Napa, CA",Retail Trade,since_feb_2020,2020-02-01,2026-01-01,6400.0,6400.0,0.0,0.0
+"Napa, CA","Wholesale, Transportation, and Utilities",past_12_months,2025-01-01,2026-01-01,3600.0,3500.0,-100.0,-2.7777777777777777
+"Napa, CA","Wholesale, Transportation, and Utilities",since_feb_2020,2020-02-01,2026-01-01,3800.0,3500.0,-300.0,-7.894736842105263
+"Oakland-Fremont-Berkeley, CA",Construction,past_12_months,2025-01-01,2026-01-01,69000.0,67800.0,-1200.0,-1.7391304347826086
+"Oakland-Fremont-Berkeley, CA",Construction,since_feb_2020,2020-02-01,2026-01-01,75700.0,67800.0,-7900.0,-10.435931307793924
+"Oakland-Fremont-Berkeley, CA",Education and Health Services,past_12_months,2025-01-01,2026-01-01,234500.0,246800.0,12300.0,5.245202558635395
+"Oakland-Fremont-Berkeley, CA",Education and Health Services,since_feb_2020,2020-02-01,2026-01-01,202600.0,246800.0,44200.0,21.816386969397826
+"Oakland-Fremont-Berkeley, CA",Financial Activities,past_12_months,2025-01-01,2026-01-01,45000.0,43900.0,-1100.0,-2.4444444444444446
+"Oakland-Fremont-Berkeley, CA",Financial Activities,since_feb_2020,2020-02-01,2026-01-01,55100.0,43900.0,-11200.0,-20.326678765880217
+"Oakland-Fremont-Berkeley, CA",Government,past_12_months,2025-01-01,2026-01-01,175400.0,176700.0,1300.0,0.7411630558722919
+"Oakland-Fremont-Berkeley, CA",Government,since_feb_2020,2020-02-01,2026-01-01,176300.0,176700.0,400.0,0.22688598979013047
+"Oakland-Fremont-Berkeley, CA",Information,past_12_months,2025-01-01,2026-01-01,25000.0,23300.0,-1700.0,-6.800000000000001
+"Oakland-Fremont-Berkeley, CA",Information,since_feb_2020,2020-02-01,2026-01-01,27500.0,23300.0,-4200.0,-15.272727272727273
+"Oakland-Fremont-Berkeley, CA",Leisure and Hospitality,past_12_months,2025-01-01,2026-01-01,106100.0,110300.0,4200.0,3.9585296889726673
+"Oakland-Fremont-Berkeley, CA",Leisure and Hospitality,since_feb_2020,2020-02-01,2026-01-01,119500.0,110300.0,-9200.0,-7.698744769874477
+"Oakland-Fremont-Berkeley, CA",Manufacturing,past_12_months,2025-01-01,2026-01-01,99700.0,94800.0,-4900.0,-4.914744232698094
+"Oakland-Fremont-Berkeley, CA",Manufacturing,since_feb_2020,2020-02-01,2026-01-01,101500.0,94800.0,-6700.0,-6.600985221674876
+"Oakland-Fremont-Berkeley, CA",Professional and Business Services,past_12_months,2025-01-01,2026-01-01,183700.0,180100.0,-3600.0,-1.95971692977681
+"Oakland-Fremont-Berkeley, CA",Professional and Business Services,since_feb_2020,2020-02-01,2026-01-01,195700.0,180100.0,-15600.0,-7.97138477261114
+"Oakland-Fremont-Berkeley, CA",Retail Trade,past_12_months,2025-01-01,2026-01-01,102900.0,101900.0,-1000.0,-0.9718172983479106
+"Oakland-Fremont-Berkeley, CA",Retail Trade,since_feb_2020,2020-02-01,2026-01-01,110100.0,101900.0,-8200.0,-7.447774750227067
+"Oakland-Fremont-Berkeley, CA","Wholesale, Transportation, and Utilities",past_12_months,2025-01-01,2026-01-01,92200.0,93400.0,1200.0,1.3015184381778742
+"Oakland-Fremont-Berkeley, CA","Wholesale, Transportation, and Utilities",since_feb_2020,2020-02-01,2026-01-01,89000.0,93400.0,4400.0,4.943820224719101
+"San Francisco-San Mateo-Redwood City, CA",Construction,past_12_months,2025-01-01,2026-01-01,36500.0,38500.0,2000.0,5.47945205479452
+"San Francisco-San Mateo-Redwood City, CA",Construction,since_feb_2020,2020-02-01,2026-01-01,46400.0,38500.0,-7900.0,-17.025862068965516
+"San Francisco-San Mateo-Redwood City, CA",Education and Health Services,past_12_months,2025-01-01,2026-01-01,159600.0,164400.0,4800.0,3.007518796992481
+"San Francisco-San Mateo-Redwood City, CA",Education and Health Services,since_feb_2020,2020-02-01,2026-01-01,151200.0,164400.0,13200.0,8.73015873015873
+"San Francisco-San Mateo-Redwood City, CA",Financial Activities,past_12_months,2025-01-01,2026-01-01,75400.0,74600.0,-800.0,-1.0610079575596816
+"San Francisco-San Mateo-Redwood City, CA",Financial Activities,since_feb_2020,2020-02-01,2026-01-01,84100.0,74600.0,-9500.0,-11.296076099881095
+"San Francisco-San Mateo-Redwood City, CA",Government,past_12_months,2025-01-01,2026-01-01,146300.0,141500.0,-4800.0,-3.2809295967190706
+"San Francisco-San Mateo-Redwood City, CA",Government,since_feb_2020,2020-02-01,2026-01-01,132100.0,141500.0,9400.0,7.115821347464042
+"San Francisco-San Mateo-Redwood City, CA",Information,past_12_months,2025-01-01,2026-01-01,102500.0,103800.0,1300.0,1.2682926829268293
+"San Francisco-San Mateo-Redwood City, CA",Information,since_feb_2020,2020-02-01,2026-01-01,104800.0,103800.0,-1000.0,-0.9541984732824428
+"San Francisco-San Mateo-Redwood City, CA",Leisure and Hospitality,past_12_months,2025-01-01,2026-01-01,121000.0,127100.0,6100.0,5.041322314049586
+"San Francisco-San Mateo-Redwood City, CA",Leisure and Hospitality,since_feb_2020,2020-02-01,2026-01-01,143800.0,127100.0,-16700.0,-11.613351877607789
+"San Francisco-San Mateo-Redwood City, CA",Manufacturing,past_12_months,2025-01-01,2026-01-01,31000.0,30700.0,-300.0,-0.967741935483871
+"San Francisco-San Mateo-Redwood City, CA",Manufacturing,since_feb_2020,2020-02-01,2026-01-01,39800.0,30700.0,-9100.0,-22.8643216080402
+"San Francisco-San Mateo-Redwood City, CA",Professional and Business Services,past_12_months,2025-01-01,2026-01-01,272100.0,274800.0,2700.0,0.9922822491730982
+"San Francisco-San Mateo-Redwood City, CA",Professional and Business Services,since_feb_2020,2020-02-01,2026-01-01,300400.0,274800.0,-25600.0,-8.5219707057257
+"San Francisco-San Mateo-Redwood City, CA",Retail Trade,past_12_months,2025-01-01,2026-01-01,61000.0,59700.0,-1300.0,-2.1311475409836063
+"San Francisco-San Mateo-Redwood City, CA",Retail Trade,since_feb_2020,2020-02-01,2026-01-01,77500.0,59700.0,-17800.0,-22.967741935483872
+"San Francisco-San Mateo-Redwood City, CA","Wholesale, Transportation, and Utilities",past_12_months,2025-01-01,2026-01-01,69300.00000000001,70600.00000000001,1300.0,1.8759018759018757
+"San Francisco-San Mateo-Redwood City, CA","Wholesale, Transportation, and Utilities",since_feb_2020,2020-02-01,2026-01-01,76500.0,70600.00000000001,-5899.999999999985,-7.712418300653575
+"San Jose-Sunnyvale-Santa Clara, CA",Construction,past_12_months,2025-01-01,2026-01-01,50300.0,53300.0,3000.0,5.964214711729622
+"San Jose-Sunnyvale-Santa Clara, CA",Construction,since_feb_2020,2020-02-01,2026-01-01,53200.0,53300.0,100.0,0.18796992481203006
+"San Jose-Sunnyvale-Santa Clara, CA",Education and Health Services,past_12_months,2025-01-01,2026-01-01,212700.0,225300.0,12600.0,5.923836389280677
+"San Jose-Sunnyvale-Santa Clara, CA",Education and Health Services,since_feb_2020,2020-02-01,2026-01-01,185100.0,225300.0,40200.0,21.71799027552674
+"San Jose-Sunnyvale-Santa Clara, CA",Financial Activities,past_12_months,2025-01-01,2026-01-01,36500.0,35900.0,-600.0,-1.643835616438356
+"San Jose-Sunnyvale-Santa Clara, CA",Financial Activities,since_feb_2020,2020-02-01,2026-01-01,39400.0,35900.0,-3500.0,-8.883248730964468
+"San Jose-Sunnyvale-Santa Clara, CA",Government,past_12_months,2025-01-01,2026-01-01,101100.0,100200.0,-900.0,-0.8902077151335311
+"San Jose-Sunnyvale-Santa Clara, CA",Government,since_feb_2020,2020-02-01,2026-01-01,99800.0,100200.0,400.0,0.4008016032064128
+"San Jose-Sunnyvale-Santa Clara, CA",Information,past_12_months,2025-01-01,2026-01-01,95600.0,97300.0,1700.0,1.778242677824268
+"San Jose-Sunnyvale-Santa Clara, CA",Information,since_feb_2020,2020-02-01,2026-01-01,105500.0,97300.0,-8200.0,-7.772511848341232
+"San Jose-Sunnyvale-Santa Clara, CA",Leisure and Hospitality,past_12_months,2025-01-01,2026-01-01,99800.0,100300.0,500.0,0.501002004008016
+"San Jose-Sunnyvale-Santa Clara, CA",Leisure and Hospitality,since_feb_2020,2020-02-01,2026-01-01,105300.0,100300.0,-5000.0,-4.748338081671415
+"San Jose-Sunnyvale-Santa Clara, CA",Manufacturing,past_12_months,2025-01-01,2026-01-01,125500.0,127400.0,1900.0,1.5139442231075697
+"San Jose-Sunnyvale-Santa Clara, CA",Manufacturing,since_feb_2020,2020-02-01,2026-01-01,129199.99999999999,127400.0,-1799.9999999999854,-1.3931888544891529
+"San Jose-Sunnyvale-Santa Clara, CA",Professional and Business Services,past_12_months,2025-01-01,2026-01-01,274800.0,273500.0,-1300.0,-0.4730713245997089
+"San Jose-Sunnyvale-Santa Clara, CA",Professional and Business Services,since_feb_2020,2020-02-01,2026-01-01,284300.0,273500.0,-10800.0,-3.798804080196975
+"San Jose-Sunnyvale-Santa Clara, CA",Retail Trade,past_12_months,2025-01-01,2026-01-01,72000.0,72800.0,800.0,1.1111111111111112
+"San Jose-Sunnyvale-Santa Clara, CA",Retail Trade,since_feb_2020,2020-02-01,2026-01-01,80600.0,72800.0,-7800.0,-9.67741935483871
+"San Jose-Sunnyvale-Santa Clara, CA","Wholesale, Transportation, and Utilities",past_12_months,2025-01-01,2026-01-01,44800.0,45100.0,300.0,0.6696428571428571
+"San Jose-Sunnyvale-Santa Clara, CA","Wholesale, Transportation, and Utilities",since_feb_2020,2020-02-01,2026-01-01,46100.0,45100.0,-1000.0,-2.1691973969631237
+"San Rafael, CA",Construction,past_12_months,2025-01-01,2026-01-01,7200.0,7200.0,0.0,0.0
+"San Rafael, CA",Construction,since_feb_2020,2020-02-01,2026-01-01,7600.0,7200.0,-400.0,-5.263157894736842
+"San Rafael, CA",Education and Health Services,past_12_months,2025-01-01,2026-01-01,22100.0,23000.0,900.0,4.072398190045249
+"San Rafael, CA",Education and Health Services,since_feb_2020,2020-02-01,2026-01-01,20900.0,23000.0,2100.0,10.047846889952153
+"San Rafael, CA",Financial Activities,past_12_months,2025-01-01,2026-01-01,4900.0,4900.0,0.0,0.0
+"San Rafael, CA",Financial Activities,since_feb_2020,2020-02-01,2026-01-01,5500.0,4900.0,-600.0,-10.909090909090908
+"San Rafael, CA",Government,past_12_months,2025-01-01,2026-01-01,15700.0,15700.0,0.0,0.0
+"San Rafael, CA",Government,since_feb_2020,2020-02-01,2026-01-01,15500.0,15700.0,200.0,1.2903225806451613
+"San Rafael, CA",Information,past_12_months,2025-01-01,2026-01-01,2800.0,2700.0,-100.0,-3.571428571428571
+"San Rafael, CA",Information,since_feb_2020,2020-02-01,2026-01-01,2700.0,2700.0,0.0,0.0
+"San Rafael, CA",Leisure and Hospitality,past_12_months,2025-01-01,2026-01-01,14100.0,14700.0,600.0,4.25531914893617
+"San Rafael, CA",Leisure and Hospitality,since_feb_2020,2020-02-01,2026-01-01,15400.0,14700.0,-700.0,-4.545454545454546
+"San Rafael, CA",Manufacturing,past_12_months,2025-01-01,2026-01-01,3800.0,3700.0,-100.0,-2.631578947368421
+"San Rafael, CA",Manufacturing,since_feb_2020,2020-02-01,2026-01-01,4900.0,3700.0,-1200.0,-24.489795918367346
+"San Rafael, CA",Professional and Business Services,past_12_months,2025-01-01,2026-01-01,16400.0,16200.0,-200.0,-1.2195121951219512
+"San Rafael, CA",Professional and Business Services,since_feb_2020,2020-02-01,2026-01-01,18800.0,16200.0,-2600.0,-13.829787234042554
+"San Rafael, CA",Retail Trade,past_12_months,2025-01-01,2026-01-01,13200.0,12700.0,-500.0,-3.787878787878788
+"San Rafael, CA",Retail Trade,since_feb_2020,2020-02-01,2026-01-01,14900.0,12700.0,-2200.0,-14.76510067114094
+"San Rafael, CA","Wholesale, Transportation, and Utilities",past_12_months,2025-01-01,2026-01-01,3700.0,3400.000000000002,-299.9999999999982,-8.108108108108059
+"San Rafael, CA","Wholesale, Transportation, and Utilities",since_feb_2020,2020-02-01,2026-01-01,3700.0,3400.000000000002,-299.9999999999982,-8.108108108108059
+"Santa Rosa-Petaluma, CA",Construction,past_12_months,2025-01-01,2026-01-01,15400.0,15500.0,100.0,0.6493506493506493
+"Santa Rosa-Petaluma, CA",Construction,since_feb_2020,2020-02-01,2026-01-01,16700.0,15500.0,-1200.0,-7.18562874251497
+"Santa Rosa-Petaluma, CA",Education and Health Services,past_12_months,2025-01-01,2026-01-01,39100.0,41200.0,2100.0,5.3708439897698215
+"Santa Rosa-Petaluma, CA",Education and Health Services,since_feb_2020,2020-02-01,2026-01-01,36500.0,41200.0,4700.0,12.876712328767123
+"Santa Rosa-Petaluma, CA",Financial Activities,past_12_months,2025-01-01,2026-01-01,6700.0,6500.0,-200.0,-2.9850746268656714
+"Santa Rosa-Petaluma, CA",Financial Activities,since_feb_2020,2020-02-01,2026-01-01,8400.0,6500.0,-1900.0,-22.61904761904762
+"Santa Rosa-Petaluma, CA",Government,past_12_months,2025-01-01,2026-01-01,28100.0,27500.0,-600.0,-2.135231316725979
+"Santa Rosa-Petaluma, CA",Government,since_feb_2020,2020-02-01,2026-01-01,29400.0,27500.0,-1900.0,-6.462585034013606
+"Santa Rosa-Petaluma, CA",Information,past_12_months,2025-01-01,2026-01-01,2600.0,2400.0,-200.0,-7.6923076923076925
+"Santa Rosa-Petaluma, CA",Information,since_feb_2020,2020-02-01,2026-01-01,2600.0,2400.0,-200.0,-7.6923076923076925
+"Santa Rosa-Petaluma, CA",Leisure and Hospitality,past_12_months,2025-01-01,2026-01-01,24200.0,25700.0,1500.0,6.198347107438017
+"Santa Rosa-Petaluma, CA",Leisure and Hospitality,since_feb_2020,2020-02-01,2026-01-01,25100.0,25700.0,600.0,2.3904382470119523
+"Santa Rosa-Petaluma, CA",Manufacturing,past_12_months,2025-01-01,2026-01-01,19900.0,19600.0,-300.0,-1.507537688442211
+"Santa Rosa-Petaluma, CA",Manufacturing,since_feb_2020,2020-02-01,2026-01-01,23200.0,19600.0,-3600.0,-15.517241379310345
+"Santa Rosa-Petaluma, CA",Professional and Business Services,past_12_months,2025-01-01,2026-01-01,23600.0,24300.0,700.0,2.9661016949152543
+"Santa Rosa-Petaluma, CA",Professional and Business Services,since_feb_2020,2020-02-01,2026-01-01,23900.0,24300.0,400.0,1.6736401673640167
+"Santa Rosa-Petaluma, CA",Retail Trade,past_12_months,2025-01-01,2026-01-01,22200.0,22100.0,-100.0,-0.45045045045045046
+"Santa Rosa-Petaluma, CA",Retail Trade,since_feb_2020,2020-02-01,2026-01-01,24000.0,22100.0,-1900.0,-7.916666666666666
+"Santa Rosa-Petaluma, CA","Wholesale, Transportation, and Utilities",past_12_months,2025-01-01,2026-01-01,10600.0,10500.0,-100.0,-0.9433962264150944
+"Santa Rosa-Petaluma, CA","Wholesale, Transportation, and Utilities",since_feb_2020,2020-02-01,2026-01-01,11900.0,10500.0,-1400.0,-11.76470588235294
+"Vallejo, CA",Construction,past_12_months,2025-01-01,2026-01-01,10600.0,10900.0,300.0,2.8301886792452833
+"Vallejo, CA",Construction,since_feb_2020,2020-02-01,2026-01-01,11900.0,10900.0,-1000.0,-8.403361344537815
+"Vallejo, CA",Education and Health Services,past_12_months,2025-01-01,2026-01-01,32800.0,34700.0,1900.0,5.7926829268292686
+"Vallejo, CA",Education and Health Services,since_feb_2020,2020-02-01,2026-01-01,29500.0,34700.0,5200.0,17.627118644067796
+"Vallejo, CA",Financial Activities,past_12_months,2025-01-01,2026-01-01,4600.0,4800.0,200.0,4.3478260869565215
+"Vallejo, CA",Financial Activities,since_feb_2020,2020-02-01,2026-01-01,5100.0,4800.0,-300.0,-5.88235294117647
+"Vallejo, CA",Government,past_12_months,2025-01-01,2026-01-01,24900.0,24200.0,-700.0,-2.8112449799196786
+"Vallejo, CA",Government,since_feb_2020,2020-02-01,2026-01-01,25000.0,24200.0,-800.0,-3.2
+"Vallejo, CA",Information,past_12_months,2025-01-01,2026-01-01,900.0,900.0,0.0,0.0
+"Vallejo, CA",Information,since_feb_2020,2020-02-01,2026-01-01,1000.0,900.0,-100.0,-10.0
+"Vallejo, CA",Leisure and Hospitality,past_12_months,2025-01-01,2026-01-01,15400.0,15800.0,400.0,2.5974025974025974
+"Vallejo, CA",Leisure and Hospitality,since_feb_2020,2020-02-01,2026-01-01,15800.0,15800.0,0.0,0.0
+"Vallejo, CA",Manufacturing,past_12_months,2025-01-01,2026-01-01,11100.0,10900.0,-200.0,-1.8018018018018018
+"Vallejo, CA",Manufacturing,since_feb_2020,2020-02-01,2026-01-01,11300.0,10900.0,-400.0,-3.5398230088495577
+"Vallejo, CA",Professional and Business Services,past_12_months,2025-01-01,2026-01-01,11200.0,10800.0,-400.0,-3.571428571428571
+"Vallejo, CA",Professional and Business Services,since_feb_2020,2020-02-01,2026-01-01,10500.0,10800.0,300.0,2.857142857142857
+"Vallejo, CA",Retail Trade,past_12_months,2025-01-01,2026-01-01,17400.0,17200.0,-200.0,-1.1494252873563218
+"Vallejo, CA",Retail Trade,since_feb_2020,2020-02-01,2026-01-01,17400.0,17200.0,-200.0,-1.1494252873563218
+"Vallejo, CA","Wholesale, Transportation, and Utilities",past_12_months,2025-01-01,2026-01-01,10900.0,10900.0,0.0,0.0
+"Vallejo, CA","Wholesale, Transportation, and Utilities",since_feb_2020,2020-02-01,2026-01-01,9100.0,10900.0,1800.0,19.78021978021978
 United States,Construction,past_12_months,2025-03-01,2026-03-01,8273000.0,8330000.0,57000.0,0.6889882751118095
 United States,Construction,since_feb_2020,2020-02-01,2026-03-01,7610000.0,8330000.0,720000.0,9.461235216819974
 United States,Education and Health Services,past_12_months,2025-03-01,2026-03-01,27132000.0,27795000.0,663000.0,2.443609022556391
