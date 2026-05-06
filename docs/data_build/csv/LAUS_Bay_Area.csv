@@ -71,7 +71,7 @@ _id,County,Area Type,Year,Month,Date_Numeric,Seasonally Adjusted(Y/N),Status,Lab
 1635,Alameda County,County,2025,December,12/2025,N,Final,871600,833400,38200,4.4,2025,2025-12-01
 1636,Alameda County,County,2026,January,01/2026,N,Final,859600,819700,39900,4.6,2025,2026-01-01
 1637,Alameda County,County,2026,February,02/2026,N,Final,866900,827800,39200,4.5,2025,2026-02-01
-1638,Alameda County,County,2026,March,03/2026,N,Final,862700,826000,36800,4.3,2025,2026-03-01
+1638,Alameda County,County,2026,March,03/2026,N,Preliminary,862700,826000,36800,4.3,2025,2026-03-01
 4170,Contra Costa County,County,2020,February,02/2020,N,Final,588200,570800,17500,3.0,2025,2020-02-01
 4171,Contra Costa County,County,2020,March,03/2020,N,Final,580000,554500,25500,4.4,2025,2020-03-01
 4172,Contra Costa County,County,2020,April,04/2020,N,Final,558000,475900,82100,14.7,2025,2020-04-01
@@ -144,7 +144,7 @@ _id,County,Area Type,Year,Month,Date_Numeric,Seasonally Adjusted(Y/N),Status,Lab
 4239,Contra Costa County,County,2025,December,12/2025,N,Final,584800,558500,26300,4.5,2025,2025-12-01
 4240,Contra Costa County,County,2026,January,01/2026,N,Final,576700,549300,27500,4.8,2025,2026-01-01
 4241,Contra Costa County,County,2026,February,02/2026,N,Final,582100,555100,26900,4.6,2025,2026-02-01
-4242,Contra Costa County,County,2026,March,03/2026,N,Final,578900,553600,25400,4.4,2025,2026-03-01
+4242,Contra Costa County,County,2026,March,03/2026,N,Preliminary,578900,553600,25400,4.4,2025,2026-03-01
 11016,Marin County,County,2020,February,02/2020,N,Final,131500,128200,3300,2.5,2025,2020-02-01
 11017,Marin County,County,2020,March,03/2020,N,Final,129100,124200,4900,3.8,2025,2020-03-01
 11018,Marin County,County,2020,April,04/2020,N,Final,118100,102900,15200,12.9,2025,2020-04-01
@@ -217,7 +217,7 @@ _id,County,Area Type,Year,Month,Date_Numeric,Seasonally Adjusted(Y/N),Status,Lab
 11085,Marin County,County,2025,December,12/2025,N,Final,124000,119100,4900,4.0,2025,2025-12-01
 11086,Marin County,County,2026,January,01/2026,N,Final,122200,117100,5100,4.2,2025,2026-01-01
 11087,Marin County,County,2026,February,02/2026,N,Final,124100,119000,5000,4.1,2025,2026-02-01
-11088,Marin County,County,2026,March,03/2026,N,Final,123400,118700,4700,3.8,2025,2026-03-01
+11088,Marin County,County,2026,March,03/2026,N,Preliminary,123400,118700,4700,3.8,2025,2026-03-01
 14054,Napa County,County,2020,February,02/2020,N,Final,73600,71200,2300,3.2,2025,2020-02-01
 14055,Napa County,County,2020,March,03/2020,N,Final,72200,68900,3300,4.6,2025,2020-03-01
 14056,Napa County,County,2020,April,04/2020,N,Final,67100,55100,12000,17.9,2025,2020-04-01
@@ -290,7 +290,7 @@ _id,County,Area Type,Year,Month,Date_Numeric,Seasonally Adjusted(Y/N),Status,Lab
 14123,Napa County,County,2025,December,12/2025,N,Final,71900,68700,3200,4.5,2025,2025-12-01
 14124,Napa County,County,2026,January,01/2026,N,Final,72000,68500,3500,4.9,2025,2026-01-01
 14125,Napa County,County,2026,February,02/2026,N,Final,73800,70400,3400,4.6,2025,2026-02-01
-14126,Napa County,County,2026,March,03/2026,N,Final,73600,70500,3200,4.3,2025,2026-03-01
+14126,Napa County,County,2026,March,03/2026,N,Preliminary,73600,70500,3200,4.3,2025,2026-03-01
 18394,San Francisco County,County,2020,February,02/2020,N,Final,547400,534300,13100,2.4,2025,2020-02-01
 18395,San Francisco County,County,2020,March,03/2020,N,Final,538500,518400,20100,3.7,2025,2020-03-01
 18396,San Francisco County,County,2020,April,04/2020,N,Final,520900,447900,73100,14.0,2025,2020-04-01
@@ -363,7 +363,7 @@ _id,County,Area Type,Year,Month,Date_Numeric,Seasonally Adjusted(Y/N),Status,Lab
 18463,San Francisco County,County,2025,December,12/2025,N,Final,505900,486500,19400,3.8,2025,2025-12-01
 18464,San Francisco County,County,2026,January,01/2026,N,Final,498700,478500,20300,4.1,2025,2026-01-01
 18465,San Francisco County,County,2026,February,02/2026,N,Final,504200,484200,19900,4.0,2025,2026-02-01
-18466,San Francisco County,County,2026,March,03/2026,N,Final,501100,482500,18600,3.7,2025,2026-03-01
+18466,San Francisco County,County,2026,March,03/2026,N,Preliminary,501100,482500,18600,3.7,2025,2026-03-01
 19696,San Mateo County,County,2020,February,02/2020,N,Final,435100,425400,9600,2.2,2025,2020-02-01
 19697,San Mateo County,County,2020,March,03/2020,N,Final,427000,412700,14300,3.3,2025,2020-03-01
 19698,San Mateo County,County,2020,April,04/2020,N,Final,407800,356700,51200,12.5,2025,2020-04-01
@@ -436,7 +436,7 @@ _id,County,Area Type,Year,Month,Date_Numeric,Seasonally Adjusted(Y/N),Status,Lab
 19765,San Mateo County,County,2025,December,12/2025,N,Final,413800,398900,14900,3.6,2025,2025-12-01
 19766,San Mateo County,County,2026,January,01/2026,N,Final,407900,392300,15500,3.8,2025,2026-01-01
 19767,San Mateo County,County,2026,February,02/2026,N,Final,412400,397100,15300,3.7,2025,2026-02-01
-19768,San Mateo County,County,2026,March,03/2026,N,Final,410000,395600,14300,3.5,2025,2026-03-01
+19768,San Mateo County,County,2026,March,03/2026,N,Preliminary,410000,395600,14300,3.5,2025,2026-03-01
 20564,Santa Clara County,County,2020,February,02/2020,N,Final,1039200,1012200,26900,2.6,2025,2020-02-01
 20565,Santa Clara County,County,2020,March,03/2020,N,Final,1021600,982200,39300,3.9,2025,2020-03-01
 20566,Santa Clara County,County,2020,April,04/2020,N,Final,993400,868500,124800,12.6,2025,2020-04-01
@@ -509,7 +509,7 @@ _id,County,Area Type,Year,Month,Date_Numeric,Seasonally Adjusted(Y/N),Status,Lab
 20633,Santa Clara County,County,2025,December,12/2025,N,Final,1040300,999500,40700,3.9,2025,2025-12-01
 20634,Santa Clara County,County,2026,January,01/2026,N,Final,1025200,982500,42700,4.2,2025,2026-01-01
 20635,Santa Clara County,County,2026,February,02/2026,N,Final,1034100,992200,42000,4.1,2025,2026-02-01
-20636,Santa Clara County,County,2026,March,03/2026,N,Final,1032700,993400,39300,3.8,2025,2026-03-01
+20636,Santa Clara County,County,2026,March,03/2026,N,Preliminary,1032700,993400,39300,3.8,2025,2026-03-01
 22734,Solano County,County,2020,February,02/2020,N,Final,216600,208400,8200,3.8,2025,2020-02-01
 22735,Solano County,County,2020,March,03/2020,N,Final,214900,203000,11900,5.6,2025,2020-03-01
 22736,Solano County,County,2020,April,04/2020,N,Final,208700,176500,32200,15.4,2025,2020-04-01
@@ -582,7 +582,7 @@ _id,County,Area Type,Year,Month,Date_Numeric,Seasonally Adjusted(Y/N),Status,Lab
 22803,Solano County,County,2025,December,12/2025,N,Final,220200,209000,11200,5.1,2025,2025-12-01
 22804,Solano County,County,2026,January,01/2026,N,Final,218100,206100,12000,5.5,2025,2026-01-01
 22805,Solano County,County,2026,February,02/2026,N,Final,219400,207600,11800,5.4,2025,2026-02-01
-22806,Solano County,County,2026,March,03/2026,N,Final,219100,208000,11100,5.1,2025,2026-03-01
+22806,Solano County,County,2026,March,03/2026,N,Preliminary,219100,208000,11100,5.1,2025,2026-03-01
 23168,Sonoma County,County,2020,February,02/2020,N,Final,255800,248500,7200,2.8,2025,2020-02-01
 23169,Sonoma County,County,2020,March,03/2020,N,Final,252200,241600,10600,4.2,2025,2020-03-01
 23170,Sonoma County,County,2020,April,04/2020,N,Final,240400,202600,37800,15.7,2025,2020-04-01
@@ -655,4 +655,4 @@ _id,County,Area Type,Year,Month,Date_Numeric,Seasonally Adjusted(Y/N),Status,Lab
 23237,Sonoma County,County,2025,December,12/2025,N,Final,246900,236500,10500,4.2,2025,2025-12-01
 23238,Sonoma County,County,2026,January,01/2026,N,Final,244000,232900,11100,4.6,2025,2026-01-01
 23239,Sonoma County,County,2026,February,02/2026,N,Final,247400,236400,11000,4.4,2025,2026-02-01
-23240,Sonoma County,County,2026,March,03/2026,N,Final,246400,236000,10400,4.2,2025,2026-03-01
+23240,Sonoma County,County,2026,March,03/2026,N,Preliminary,246400,236000,10400,4.2,2025,2026-03-01
