@@ -1,4 +1,4 @@
-_id,County,Area Type,Year,Month,Date_Numeric,Seasonally Adjusted(Y/N),Status,LaborForce,Employment,Unemployment,UnemploymentRate,Benchmark,date
+_id,County,Area Type,Year,Month,Date_Numeric,seasonally_adjusted_y_n_,Status,LaborForce,Employment,Unemployment,UnemploymentRate,Benchmark,date
 1576,Alameda County,County,2020,February,02/2020,N,Final,896400,871500,25000,2.8,2025,2020-02-01
 1577,Alameda County,County,2020,March,03/2020,N,Final,883500,846600,36900,4.2,2025,2020-03-01
 1578,Alameda County,County,2020,April,04/2020,N,Final,845900,726700,119300,14.1,2025,2020-04-01
